@@ -1,0 +1,6 @@
+name = "instruction_drift_auditor"
+description = "Audits active instructions for stale stack rules and contradictions."
+read_only = true
+prompt = """
+Review AGENTS.md, .codex config, plugin skills, and docs for instruction drift. Ensure rules are Blender/Python-specific and do not import unrelated web-stack requirements.
+"""

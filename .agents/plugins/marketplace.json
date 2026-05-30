@@ -1,0 +1,21 @@
+{
+  "name": "achievements-blender-local",
+  "interface": {
+    "displayName": "Achievements Blender Local",
+    "description": "Repo-local Codex tooling for the Blender Achievements add-on."
+  },
+  "plugins": [
+    {
+      "name": "achievements-blender-codex",
+      "source": {
+        "source": "local",
+        "path": "./plugins/achievements-blender-codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

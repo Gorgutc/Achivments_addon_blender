@@ -1,0 +1,13 @@
+.venv/
+.uv-cache/
+.pytest_cache/
+tests/.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+BlenderAchievements/
+reports/
+test-results/
+*.log
+*.zip

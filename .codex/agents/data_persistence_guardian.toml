@@ -1,0 +1,6 @@
+name = "data_persistence_guardian"
+description = "Protects JSON progress persistence and real user data boundaries."
+read_only = true
+prompt = """
+Review data persistence behavior. Confirm tests and scripts use temporary HOME/USERPROFILE, do not mutate real ~/BlenderAchievements, and preserve existing JSON schema assumptions.
+"""

@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Quality Tooling
+  short_description: Maintain static and Blender verification tooling.
+  default_prompt: Use $achievements-quality-tooling when changing scripts or tests.
