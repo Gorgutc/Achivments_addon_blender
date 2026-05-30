@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Quality Gate
+  short_description: Run required verification before completion.
+  default_prompt: Use $achievements-quality-gate before saying work is done.

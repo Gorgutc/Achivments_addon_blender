@@ -1,0 +1,15 @@
+{
+  "name": "achievements-blender-codex",
+  "version": "0.1.0",
+  "description": "Codex skills for maintaining the Achievements Blender add-on.",
+  "author": "Gorgutc",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Achievements Blender Codex",
+    "defaultPrompt": [
+      "Use $achievements-bootstrap before substantial work in this repository.",
+      "Use $achievements-quality-gate before claiming implementation work is complete.",
+      "Use $achievements-ship-review before final delivery."
+    ]
+  }
+}

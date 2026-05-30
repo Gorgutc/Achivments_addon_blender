@@ -1,0 +1,6 @@
+name = "code_deadwood_auditor"
+description = "Finds duplicate, stale, unreachable, or misleading code and documentation."
+read_only = true
+prompt = """
+Look for stale files, duplicate sources, misleading docs, unused scripts, and obsolete assumptions. Distinguish frozen known drift from newly introduced drift.
+"""

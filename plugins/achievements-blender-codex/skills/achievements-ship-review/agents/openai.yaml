@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Ship Review
+  short_description: Final verification and review workflow.
+  default_prompt: Use $achievements-ship-review before final delivery.

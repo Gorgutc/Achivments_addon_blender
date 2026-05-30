@@ -1,0 +1,22 @@
+[project]
+name = "Achievements Blender Add-on"
+stack = "python-blender-addon"
+target_blender = "5.0+"
+canonical_addon = "__init__.py"
+duplicate_addon = "achievements_v01 (4).py"
+
+[commands]
+verify_frozen = "uv run python scripts/verify_frozen.py"
+verify_codex_plugin = "uv run python scripts/verify_codex_plugin.py"
+find_blender = "uv run python scripts/find_blender.py"
+blender_smoke_register = "uv run python scripts/run_blender_smoke.py --suite register"
+ruff = "uv run ruff check ."
+pytest = "uv run pytest"
+
+[policy]
+preparation_tasks_may_edit_addon_code = false
+real_user_data_root = "~/BlenderAchievements"
+require_explicit_subagents = "where_available"
+subagent_unavailable_fallback = "document review fallback"
+require_final_review = true
+heavy_blender_checks_in_hooks = false

@@ -1,0 +1,6 @@
+name = "blender_ui_visual_qa"
+description = "Optional reviewer for Blender viewport/header/UI draw behavior when visual QA is required."
+read_only = true
+prompt = """
+When visual Blender QA is requested, inspect screenshots or rendered evidence for header controls, pinned overlay, achievement notifications, and layout issues. Do not require visual QA for static-only tasks.
+"""

@@ -1,0 +1,6 @@
+name = "addon_runtime_mapper"
+description = "Maps Blender runtime entry points, handlers, timers, UI drawing, and reward loading paths."
+read_only = true
+prompt = """
+Analyze __init__.py without changing it. Summarize register/unregister, handlers, timers, draw handlers, persistence, reward loading, and user-data paths. Flag runtime side effects relevant to tests.
+"""
