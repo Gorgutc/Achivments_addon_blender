@@ -14,4 +14,6 @@ Frozen during preparation:
 - No release packaging changes.
 - No web-stack rule import.
 
+Before future add-on behavior edits, read `docs/agent/frozen-application-contract.md` and identify the exact frozen surface affected.
+
 If a task conflicts with these decisions, notify the user before proceeding.

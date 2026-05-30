@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,7 @@ REQUIRED_AGENTS = [
 ]
 REQUIRED_DOCS = [
     "docs/agent/architecture.md",
+    "docs/agent/frozen-application-contract.md",
     "docs/agent/orchestration.md",
     "docs/agent/verification.md",
     "docs/agent/quality-tooling.md",
@@ -51,6 +53,21 @@ REQUIRED_HOOKS = [
     ".codex/hooks/session-start.py",
     ".codex/hooks/user-prompt-nudge.py",
     ".codex/hooks/post-edit-static.py",
+]
+REQUIRED_INFRA_FILES = [
+    "AGENTS.md",
+    ".agents/plugins/marketplace.json",
+    ".codex/config.toml",
+    ".codex/hooks.json",
+    "pyproject.toml",
+    "scripts/find_blender.py",
+    "scripts/run_blender_smoke.py",
+    "scripts/verify_codex_plugin.py",
+    "scripts/verify_frozen.py",
+    "tests/test_infra_scripts.py",
+    "tests/blender/smoke_register.py",
+    "tests/blender/smoke_persistence.py",
+    "tests/blender/smoke_rewards.py",
 ]
 FORBIDDEN_ACTIVE_TERMS = [
     "Next.js",
@@ -80,6 +97,20 @@ def read_json(path: Path) -> dict:
 def has_frontmatter(path: Path, name: str) -> bool:
     text = path.read_text(encoding="utf-8")
     return text.startswith("---\n") and f"name: {name}" in text and "description:" in text
+
+
+def git_tracked_files() -> tuple[bool, set[str], str]:
+    result = subprocess.run(
+        ["git", "ls-files"],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, set(), result.stdout.strip() or f"git ls-files returned {result.returncode}"
+    return True, set(result.stdout.splitlines()), ""
 
 
 def verify_marketplace() -> None:
@@ -136,16 +167,44 @@ def verify_codex_mirror() -> None:
 def verify_docs() -> None:
     for doc in REQUIRED_DOCS:
         record(f"agent doc exists: {doc}", (ROOT / doc).is_file())
-    active_docs = [ROOT / "AGENTS.md", *[ROOT / doc for doc in REQUIRED_DOCS]]
+    active_docs = [
+        ROOT / "AGENTS.md",
+        ROOT / ".codex" / "config.toml",
+        ROOT / ".codex" / "hooks.json",
+        ROOT / ".agents" / "plugins" / "marketplace.json",
+        PLUGIN_ROOT / ".codex-plugin" / "plugin.json",
+        *[ROOT / doc for doc in REQUIRED_DOCS],
+        *[ROOT / hook for hook in REQUIRED_HOOKS],
+        *[ROOT / ".codex" / "agents" / f"{agent}.toml" for agent in REQUIRED_AGENTS],
+        *[SKILL_ROOT / skill / "SKILL.md" for skill in REQUIRED_SKILLS],
+        *[SKILL_ROOT / skill / "agents" / "openai.yaml" for skill in REQUIRED_SKILLS],
+    ]
     stale: list[str] = []
     for path in active_docs:
         if not path.is_file():
             continue
-        text = path.read_text(encoding="utf-8")
-        for term in FORBIDDEN_ACTIVE_TERMS:
-            if term in text and "not copied" not in text and "not portable" not in text:
-                stale.append(f"{path.relative_to(ROOT)}:{term}")
-    record("active docs avoid stale web-stack rules", not stale, ", ".join(stale[:8]))
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for term in FORBIDDEN_ACTIVE_TERMS:
+                if term in line and "not copied" not in line and "not portable" not in line:
+                    stale.append(f"{path.relative_to(ROOT)}:{lineno}:{term}")
+    record("active instructions avoid stale web-stack rules", not stale, ", ".join(stale[:8]))
+
+
+def verify_tracked_required_files() -> None:
+    ok, tracked, error = git_tracked_files()
+    record("git tracked file list available", ok, error)
+    if not ok:
+        return
+    required = set(REQUIRED_INFRA_FILES)
+    required.update(REQUIRED_DOCS)
+    required.update(REQUIRED_HOOKS)
+    required.update(f".codex/agents/{agent}.toml" for agent in REQUIRED_AGENTS)
+    for skill in REQUIRED_SKILLS:
+        required.add(f"plugins/{PLUGIN_NAME}/skills/{skill}/SKILL.md")
+        required.add(f"plugins/{PLUGIN_NAME}/skills/{skill}/agents/openai.yaml")
+    required.add(f"plugins/{PLUGIN_NAME}/.codex-plugin/plugin.json")
+    missing = sorted(path for path in required if path not in tracked)
+    record("required Codex infra files are tracked", not missing, ", ".join(missing[:8]))
 
 
 def main() -> int:
@@ -154,6 +213,7 @@ def main() -> int:
     verify_skills()
     verify_codex_mirror()
     verify_docs()
+    verify_tracked_required_files()
     passed = sum(1 for _name, ok, _detail in checks if ok)
     failed = len(checks) - passed
     print(f"\nSUMMARY: {passed}/{len(checks)} PASS, {failed} FAIL")

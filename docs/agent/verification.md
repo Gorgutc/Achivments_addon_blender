@@ -11,6 +11,8 @@ Blender discovery:
 
 Deep Blender gate:
 - `uv run python scripts/run_blender_smoke.py --suite register`
+- `uv run python scripts/run_blender_smoke.py --suite persistence`
+- `uv run python scripts/run_blender_smoke.py --suite rewards`
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.
@@ -25,3 +27,5 @@ Blender smoke rules:
 - Always run with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
 - Use background mode and factory startup.
 - Verify register/unregister lifecycle and cleanup.
+- Verify persistence schema and hash migration under a temporary profile.
+- Verify material, mesh, and geo node reward fallbacks under a temporary profile.

@@ -1,0 +1,262 @@
+# Frozen Application Contract
+
+This document freezes the current `main` behavior of the Achievements Blender add-on. Future edits must be narrow: change only the requested behavior and preserve every unrelated rule, UI decision, data shape, and lifecycle decision below unless the user explicitly asks to change it.
+
+## Source Of Truth
+
+- Canonical add-on source: `__init__.py`.
+- Tracked duplicate: `achievements_v01 (4).py`; it must stay byte-identical until a later explicit duplicate-removal task.
+- Stale reference file: `achievements_100_list.md` documents an older 100-achievement design and is not the current source of truth.
+- README is useful orientation but the executable contract is the add-on code plus this frozen contract.
+- Source strings are UTF-8 Russian user-facing text. Mojibake in terminal output is a display/encoding artifact, not permission to normalize or rewrite all text.
+
+## Application Identity
+
+- Add-on name: `Achievements`.
+- Author: `axximus`.
+- Version: `(0, 1, 0)`.
+- Current `bl_info["blender"]`: `(4, 5, 0)`, known drift against the future Blender 5.0+ policy.
+- Location: `3D Viewport > Header (trophy icon)`.
+- Category: `Interface`.
+- Product concept: Blender gamification with achievements, XP/levels, rewards, tutorials, popups, and pinning.
+
+## Catalog Freeze
+
+- Achievements: 105 total.
+- Lessons: 9 total.
+- Achievement check types: 40 `stat`, 65 `complex`.
+- Complex steps: 85 total, with 1 to 4 steps per complex achievement.
+- Achievement categories: `EDITING` 45, `MATERIALS` 17, `RENDERING` 17, `TIME` 12, `GEO_NODES` 14.
+- Lesson categories: `EDITING` 5, `MATERIALS` 1, `TIME` 1, `GEO_NODES` 1, `RENDERING` 1.
+- Difficulty counts: `easy` 10, `medium` 40, `hard` 55.
+- Reward type counts: `none` 82, `tutorial` 2, `material` 11, `geo_nodes` 5, `mesh` 5.
+- Reward category counts in achievements: `MESHES` 38, `SHADERS` 49, `GEO_NODES` 18.
+- Reward categories declared by UI: `MESHES`, `GEO_NODES`, `SHADERS`, `COMPOSITOR`. `COMPOSITOR` currently has zero achievement entries and must not be removed casually.
+
+Do not reorder, rename, or delete IDs, category keys, stat keys, complex IDs, reward categories, lesson IDs, or achievement IDs unless the task explicitly asks for catalog migration.
+
+## Achievement Schema
+
+Every achievement entry keeps these fields:
+- `id`
+- `title`
+- `description`
+- `goal`
+- `stat_key`
+- `category`
+- `check_type`
+- `difficulty`
+- `reward_type`
+- `reward_data`
+- `reward_category`
+- `lesson_id`
+- `icon_gray`
+- `icon_color`
+
+Complex achievements additionally keep:
+- `complex_id`
+- `steps`, with each step containing `label` and `check`.
+
+Stat achievements must not define `complex_id` or `steps`. Complex achievements must use `stat_key == "_complex"`.
+
+## Stats And Persistence
+
+Runtime data path is created at import time:
+- `~/BlenderAchievements/`
+- `~/BlenderAchievements/achievements_data.json`
+- `~/BlenderAchievements/textures/`
+- `~/BlenderAchievements/rewards/`
+
+JSON persistence keys:
+- `stats`
+- `unlocked`
+- `unlock_hashes`
+- `rewards_claimed`
+- `pinned_ach_id`
+- `daily_sessions`
+
+Persisted stat fields:
+- `vertices_created`
+- `vertices_deleted`
+- `edges_created`
+- `faces_created`
+- `meshes_1000plus`
+- `materials_applied`
+- `time_spent`
+- `renders_completed`
+
+Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Do not change persistence shape, path, migration behavior, or active-time semantics without an explicit data migration task.
+
+## XP And Levels
+
+- Difficulty XP: `easy = 5`, `medium = 10`, `hard = 20`.
+- Level thresholds double from 20 XP for level 1 to 2, through 10 levels.
+- Level 10 is the cap and displays `MAX`.
+- Level title keys are 1 through 10 and are part of the UI contract.
+
+## Reward Rules
+
+- Unlock protection uses `_REWARD_SALT`, `os.getlogin()`, SHA-256, and the first 16 hex characters.
+- Rewards can be applied only when the achievement is unlocked and the stored unlock hash verifies.
+- `tutorial` rewards open URLs.
+- `none` rewards do nothing and stay claim-free.
+- `material`, `mesh`, and `geo_nodes` rewards load assets from `~/BlenderAchievements/rewards/` via `.blend` libraries when present.
+- Missing asset fallbacks are intentional: generated material, ico sphere mesh, or node modifier placeholder.
+- Material rewards overwrite all material slots on the active mesh.
+- Mesh rewards link loaded objects into the active collection.
+- Geo node rewards create a `NODES` modifier on the active object.
+
+## UI Design Freeze
+
+Global layout:
+- Main entry is a 3D Viewport header button: `Achievements (unlocked/total)`.
+- Popup width is derived from `GRID_COLS * _CARD_W * _UNIT + 80`.
+- Grid is 2 columns by 5 rows, 10 cards per page.
+- Cards are horizontal: icon on the left, text and actions on the right.
+- Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
+- Card width is `_CARD_W = 15.6`.
+- Pagination uses left/right triangle icons and page text.
+
+Tabs:
+- `TASKS`: locked/uncompleted achievements.
+- `DONE`: unlocked achievements.
+- `LESSONS`: lesson cards.
+- `STORAGE`: unlocked material/mesh/geo node rewards.
+
+Accordions:
+- Tasks default `EDITING` open; other task categories closed.
+- Done, lessons, and storage accordions default closed.
+- Accordion state is stored in `bpy.types.Scene` properties.
+
+Achievement cards:
+- Locked achievement title and description are disabled.
+- Difficulty and XP appear inline in the title row.
+- Stat achievements show a block-character progress bar with value/goal/percent.
+- Complex achievements show step rows plus done-step count and percent.
+- Pin button appears on task cards only.
+- Reward label appears when reward type is not `none`.
+- Reward action appears on unlocked cards only.
+
+Lesson cards:
+- Lesson cards use the same unified card layout.
+- Linked achievement progress is shown as done/total when linked achievements exist.
+- Lesson URL button opens via `ach.open_tutorial`.
+
+Storage:
+- Storage shows only unlocked achievements with reward type `material`, `mesh`, or `geo_nodes`.
+- Storage is grouped by reward category.
+
+## Overlay And Notification Design
+
+Notifications:
+- Steam-style bottom-left GPU overlay.
+- Duration: 8 seconds.
+- Slide-in: 0.4 seconds.
+- Fade-out: last 2 seconds.
+- Size: 500x132 px.
+- Margin: 20 px.
+- Icon placeholder: 100x100 px.
+- Green left stripe.
+- Three text lines: achievement received label, title, description.
+
+Pinned achievement overlay:
+- Same size and bottom-left origin as notifications.
+- Yellow left stripe.
+- Sits above active notifications.
+- Shows current progress.
+- Auto-unpins when the achievement unlocks.
+
+Do not replace GPU overlay behavior with panel-only UI unless explicitly requested.
+
+## Runtime Lifecycle
+
+Registration registers:
+- Seven operator classes.
+- `bpy.types.Scene` tab/page/accordion properties.
+- `depsgraph_update_post`, `load_post`, `save_pre`, and `render_complete` handlers.
+- `_timer_tick` and `_notification_redraw_tick` timers.
+- `VIEW3D_HT_header` draw callback.
+- Two `SpaceView3D` GPU draw handlers.
+
+Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke.
+
+## Function Map
+
+Security and XP:
+- `_make_unlock_hash`
+- `_verify_unlock`
+- `_calc_xp`
+- `_calc_level`
+- `_difficulty_label`
+
+Persistence and activity:
+- `_on_user_activity`
+- `_flush_session_time`
+- `save_data`
+- `load_data`
+
+GPU overlays:
+- `_add_notification`
+- `_tag_redraw_all`
+- `_draw_rect`
+- `_reward_type_label`
+- `_ease_out_cubic`
+- `_draw_notifications`
+- `_draw_pinned_achievement`
+
+Achievement checking:
+- `check_achievements`
+- `_unlock_achievement`
+- `_check_streak`
+- `_check_complex_step`
+- `_check_complex`
+- `check_complex_achievements`
+- `_get_mesh_counts`
+
+Blender handlers and timers:
+- `on_depsgraph_update`
+- `on_load_post`
+- `on_save_pre`
+- `on_render_complete`
+- `_timer_tick`
+- `_notification_redraw_tick`
+
+Icons and previews:
+- `_ensure_icons`
+- `_get_icon_id`
+
+Operators:
+- `ACH_OT_OpenWindow`
+- `ACH_OT_OpenTutorial`
+- `ACH_OT_ApplyReward`
+- `ACH_OT_PinAchievement`
+- `ACH_OT_PagePrev`
+- `ACH_OT_PageNext`
+- `ACH_OT_AchievementsDialog`
+
+UI helpers:
+- `_tab_prop`
+- `_draw_unified_card`
+- `_draw_grid_page`
+- `_draw_header_button`
+
+Lifecycle:
+- `register`
+- `unregister`
+
+## Future Change Rule
+
+Before editing add-on behavior:
+1. Identify the exact frozen section affected.
+2. Confirm whether the user explicitly requested a behavior/design/data change.
+3. Keep unrelated sections unchanged.
+4. Update this contract and verifiers only when the accepted behavior changes.
+5. Run static verification and Blender smoke appropriate to the touched surface.
+
+## Required Verification Coverage
+
+- `verify_frozen.py` freezes counts, schema keys, UI/runtime constants, top-level function map, class map, registered classes, duplicate hash, tracked-data safety, and this contract.
+- `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
+- Blender `register` smoke freezes registration cleanup.
+- Blender `persistence` smoke freezes temp-home JSON schema, save/load, and unlock-hash migration.
+- Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior.
