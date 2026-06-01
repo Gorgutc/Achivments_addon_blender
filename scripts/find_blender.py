@@ -12,7 +12,7 @@ MIN_VERSION = (5, 0, 0)
 WINDOWS_CANDIDATES = [
     Path(r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"),
     Path(r"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"),
-    Path(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"),
+    Path(r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"),
 ]
 
 

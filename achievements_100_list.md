@@ -1,5 +1,7 @@
 # 100 Достижений для Blender Addon — Геймификация обучения 3D-моделированию
 
+> stale reference: this document is historical planning material. Current code truth is 105 achievements and 9 lessons; do not use this file as the active catalog source.
+
 ## Сводка
 
 ### По категориям

@@ -48,6 +48,9 @@ REQUIRED_DOCS = [
     "docs/agent/packaging-release.md",
     "docs/agent/archive-policy.md",
     "docs/agent/adrs/0001-codex-infra-port.md",
+    "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
+    "docs/handoff/iteration-handoff-template.md",
+    "docs/handoff/current.md",
 ]
 REQUIRED_HOOKS = [
     ".codex/hooks/session-start.py",
