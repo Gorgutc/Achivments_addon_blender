@@ -74,9 +74,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 3: Skeleton And Extension Draft
 
-- [ ] Introduce a modular `achievements/` package without changing runtime behavior.
-- [ ] Keep `__init__.py` as the Blender entrypoint and delegate only when smoke tests prove parity.
-- [ ] Add a draft `blender_manifest.toml` early so extension packaging constraints shape later work.
+- [x] Introduce a modular `achievements/` package without changing runtime behavior.
+- [x] Keep `__init__.py` as the Blender entrypoint and delegate only when smoke tests prove parity.
+- [x] Add a draft `blender_manifest.toml` early so extension packaging constraints shape later work.
 
 **Acceptance:** Register/unregister smoke passes, package import is safe in normal Python, and imports do not create real user data.
 

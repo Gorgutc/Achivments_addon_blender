@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,9 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert_clean_verifier(result)
     assert "plugin manifest exists" in result.stdout
     assert "codex agent exists" in result.stdout
+    assert "extension draft exists: blender_manifest.toml" in result.stdout
+    assert "package skeleton exists: achievements/__init__.py" in result.stdout
+    assert "package metadata exists: achievements/metadata.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -96,6 +100,12 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "Handoff Gate",
     ):
         assert phrase in plan_text
+    for phrase in (
+        "- [x] Introduce a modular `achievements/` package without changing runtime behavior.",
+        "- [x] Keep `__init__.py` as the Blender entrypoint and delegate only when smoke tests prove parity.",
+        "- [x] Add a draft `blender_manifest.toml` early so extension packaging constraints shape later work.",
+    ):
+        assert phrase in plan_text
 
     template_text = handoff_template.read_text(encoding="utf-8")
     for heading in (
@@ -125,21 +135,79 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 2: Runtime And Documentation Alignment",
-        "README.md",
-        "scripts/find_blender.py",
+        "Iteration 3: Skeleton And Extension Draft",
+        "achievements/__init__.py",
+        "achievements/metadata.py",
+        "blender_manifest.toml",
+        "docs/agent/packaging-release.md",
+        "scripts/verify_codex_plugin.py",
+        "tests/test_infra_scripts.py",
+        "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
+        "Package import is safe in normal Python",
+        "No add-on runtime behavior was delegated to the new package",
+        "uv run pytest tests/test_infra_scripts.py::test_iteration_3_package_skeleton_and_manifest_are_safe_to_import tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "Blender smoke suites `register`, `persistence`, and `rewards` passed",
+        "Blender smoke suite `register` passed",
         "Final `/review` fallback status: PASS",
-        "Continue `codex/implement-iterative-plan-baseline` from Iteration 3",
+        "Continue `codex/iteration-3-skeleton-extension-draft` from Iteration 4",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
     assert "must be performed before final delivery" not in current_text
     assert "only inside negative test assertions" not in current_text
+
+
+def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
+    package_init = ROOT / "achievements" / "__init__.py"
+    package_metadata = ROOT / "achievements" / "metadata.py"
+    manifest = ROOT / "blender_manifest.toml"
+
+    for path in (package_init, package_metadata, manifest):
+        assert path.is_file(), f"missing Iteration 3 artifact: {path.relative_to(ROOT)}"
+
+    for path in (package_init, package_metadata):
+        text = path.read_text(encoding="utf-8")
+        assert "import bpy" not in text
+        assert "BlenderAchievements" not in text
+        assert "Path.home()" not in text
+
+    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    assert data["schema_version"] == "1.0.0"
+    assert data["id"] == "achievements"
+    assert data["version"] == "0.1.0"
+    assert data["name"] == "Achievements"
+    assert data["type"] == "add-on"
+    assert data["blender_version_min"] == "5.0.0"
+    assert data["license"] == ["SPDX:GPL-3.0-or-later"]
+
+    home = tmp_path / "home"
+    userprofile = tmp_path / "profile"
+    resources = tmp_path / "resources"
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "USERPROFILE": str(userprofile),
+        "BLENDER_USER_RESOURCES": str(resources),
+        "PYTHONPATH": str(ROOT),
+    }
+    result = run_script(
+        "-c",
+        (
+            "import achievements; "
+            "print(achievements.ADDON_NAME); "
+            "print(achievements.BLENDER_COMPATIBILITY_FLOOR)"
+        ),
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout
+    assert "Achievements" in result.stdout
+    assert "(5, 0, 0)" in result.stdout
+    assert not (home / "BlenderAchievements").exists()
+    assert not (userprofile / "BlenderAchievements").exists()
+    assert not (resources / "BlenderAchievements").exists()
 
 
 def test_runtime_docs_alignment_matches_current_policy():
@@ -176,3 +244,8 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "stale reference" in stale_catalog_reference
     assert "105 achievements" in stale_catalog_reference
     assert "9 lessons" in stale_catalog_reference
+
+    packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
+    assert "draft `blender_manifest.toml` exists" in packaging_release
+    assert "not a functional extension entrypoint" in packaging_release
+    assert "Whether a Blender extension manifest is introduced" not in packaging_release
