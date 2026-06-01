@@ -62,6 +62,9 @@ REQUIRED_INFRA_FILES = [
     ".agents/plugins/marketplace.json",
     ".codex/config.toml",
     ".codex/hooks.json",
+    "achievements/__init__.py",
+    "achievements/metadata.py",
+    "blender_manifest.toml",
     "pyproject.toml",
     "scripts/find_blender.py",
     "scripts/run_blender_smoke.py",
@@ -193,6 +196,15 @@ def verify_docs() -> None:
     record("active instructions avoid stale web-stack rules", not stale, ", ".join(stale[:8]))
 
 
+def verify_extension_draft() -> None:
+    manifest = ROOT / "blender_manifest.toml"
+    package_init = ROOT / "achievements" / "__init__.py"
+    package_metadata = ROOT / "achievements" / "metadata.py"
+    record("extension draft exists: blender_manifest.toml", manifest.is_file())
+    record("package skeleton exists: achievements/__init__.py", package_init.is_file())
+    record("package metadata exists: achievements/metadata.py", package_metadata.is_file())
+
+
 def verify_tracked_required_files() -> None:
     ok, tracked, error = git_tracked_files()
     record("git tracked file list available", ok, error)
@@ -216,6 +228,7 @@ def main() -> int:
     verify_skills()
     verify_codex_mirror()
     verify_docs()
+    verify_extension_draft()
     verify_tracked_required_files()
     passed = sum(1 for _name, ok, _detail in checks if ok)
     failed = len(checks) - passed
