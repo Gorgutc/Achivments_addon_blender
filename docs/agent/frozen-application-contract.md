@@ -5,7 +5,7 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 ## Source Of Truth
 
 - Canonical add-on source: `__init__.py`.
-- Tracked duplicate: `achievements_v01 (4).py`; it must stay byte-identical until a later explicit duplicate-removal task.
+- Tracked duplicate: `achievements_v01 (4).py`; it is a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task.
 - Stale reference file: `achievements_100_list.md` documents an older 100-achievement design and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code plus this frozen contract.
 - Source strings are UTF-8 Russian user-facing text. Mojibake in terminal output is a display/encoding artifact, not permission to normalize or rewrite all text.

@@ -11,4 +11,4 @@ Frozen source facts:
 - Runtime surfaces: Blender handlers, timers, Scene properties, GPU draw UI, and reward loading from `.blend` assets.
 - Full frozen application contract: `docs/agent/frozen-application-contract.md`.
 
-The preparation layer must document these facts and avoid changing add-on behavior. Future add-on work should first decide whether to remove the duplicate file, align `bl_info` with Blender 5.0+, and update stale 100-achievement text.
+The preparation layer must document these facts and avoid changing add-on behavior. The duplicate is a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task. Future add-on work should align `bl_info` with the Blender 5.0+ floor and update stale 100-achievement text without changing runtime behavior accidentally.

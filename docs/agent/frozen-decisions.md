@@ -5,7 +5,7 @@ Frozen for preparation work:
 - Do not edit `achievements_v01 (4).py`.
 - Treat 105 achievements and 9 lessons as the current code truth.
 - Treat `docs/agent/frozen-application-contract.md` as the active frozen map for current rules, design, functions, data surfaces, and future change boundaries.
-- Treat `achievements_v01 (4).py` as a known duplicate drift risk.
+- Treat `achievements_v01 (4).py` as a permanent byte-identical duplicate and known drift risk unless the user explicitly changes that policy in a later task.
 - Treat `bl_info["blender"] == (4, 5, 0)` as known drift against the future Blender 5.0+ policy.
 - Treat old 100-achievement text as known documentation/code text drift.
 - Do not copy Node/npm/pnpm package-manager workflows or web checks from sibling repositories; Python `uv` tooling is allowed here.
