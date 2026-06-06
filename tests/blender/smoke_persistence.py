@@ -10,6 +10,7 @@ ROOT = Path(os.environ["ACHIEVEMENTS_ADDON_ROOT"])
 ADDON_PATH = ROOT / "__init__.py"
 MODULE_NAME = "achievements_blender_smoke_persistence_addon"
 EXPECTED_TOP_KEYS = {
+    "schema_version",
     "stats",
     "unlocked",
     "unlock_hashes",
@@ -72,6 +73,8 @@ def main() -> None:
         data = json.loads(data_path.read_text(encoding="utf-8"))
         if set(data) != EXPECTED_TOP_KEYS:
             fail(f"unexpected top-level keys: {sorted(data)}")
+        if data["schema_version"] != "1.0.0":
+            fail(f"unexpected schema_version: {data['schema_version']}")
         if set(data["stats"]) != EXPECTED_STAT_KEYS:
             fail(f"unexpected stat keys: {sorted(data['stats'])}")
 
@@ -84,16 +87,34 @@ def main() -> None:
         if module.stats.vertices_created != 12 or "first_vertex" not in module.stats.unlocked:
             fail("load_data did not restore saved values")
 
+        data.pop("schema_version", None)
         data["unlock_hashes"] = {}
         data_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         module.stats.unlock_hashes = {}
         module.load_data()
         if "first_vertex" not in module.stats.unlock_hashes:
             fail("load_data did not migrate missing unlock hash")
+        if not module.ach_persistence.backup_path(data_path).is_file():
+            fail("migration save did not create backup file")
+        migrated = json.loads(data_path.read_text(encoding="utf-8"))
+        if migrated.get("schema_version") != "1.0.0":
+            fail("load_data did not persist schema_version migration")
+
+        data_path.write_text("{broken json", encoding="utf-8")
+        module.stats.vertices_created = 999
+        module.load_data()
+        corrupt_files = list(data_path.parent.glob("achievements_data.json.corrupt*"))
+        if len(corrupt_files) != 1:
+            fail(f"corrupt JSON was not quarantined: {corrupt_files}")
+        recovered = json.loads(data_path.read_text(encoding="utf-8"))
+        if recovered.get("schema_version") != "1.0.0":
+            fail("corrupt recovery did not recreate current schema")
+        if module.stats.vertices_created != 0:
+            fail("corrupt recovery did not reset stats to default")
     finally:
         module.unregister()
 
-    print("[smoke_persistence:PASS] JSON schema, load, save, and hash migration clean")
+    print("[smoke_persistence:PASS] JSON schema, load, save, migration, and corrupt recovery clean")
 
 
 if __name__ == "__main__":

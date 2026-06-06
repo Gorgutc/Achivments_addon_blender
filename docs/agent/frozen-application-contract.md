@@ -62,19 +62,22 @@ Stat achievements must not define `complex_id` or `steps`. Complex achievements 
 
 ## Stats And Persistence
 
-Runtime data path is created at import time:
+Runtime data path is resolved at import time but created lazily during registration/save:
 - `~/BlenderAchievements/`
 - `~/BlenderAchievements/achievements_data.json`
 - `~/BlenderAchievements/textures/`
 - `~/BlenderAchievements/rewards/`
 
 JSON persistence keys:
+- `schema_version`
 - `stats`
 - `unlocked`
 - `unlock_hashes`
 - `rewards_claimed`
 - `pinned_ach_id`
 - `daily_sessions`
+
+Current persistence schema version: `1.0.0`.
 
 Persisted stat fields:
 - `vertices_created`
@@ -86,7 +89,7 @@ Persisted stat fields:
 - `time_spent`
 - `renders_completed`
 
-Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Do not change persistence shape, path, migration behavior, or active-time semantics without an explicit data migration task.
+Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without `schema_version` is migrated idempotently. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Do not change persistence shape, path, migration behavior, corrupt-file recovery, or active-time semantics without an explicit data migration task.
 
 ## XP And Levels
 
@@ -193,6 +196,7 @@ Security and XP:
 Persistence and activity:
 - `_on_user_activity`
 - `_flush_session_time`
+- `_ensure_data_dirs`
 - `save_data`
 - `load_data`
 
@@ -272,5 +276,5 @@ Before editing add-on behavior:
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
 - Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
-- Blender `persistence` smoke freezes temp-home JSON schema, save/load, and unlock-hash migration.
+- Blender `persistence` smoke freezes temp-home JSON schema, save/load, unlock-hash migration, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior.

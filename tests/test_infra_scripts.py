@@ -78,6 +78,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "catalog module exists: achievements/catalog.py" in result.stdout
     assert "event helpers exist: achievements/events.py" in result.stdout
     assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
+    assert "persistence helpers exist: achievements/persistence.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -110,6 +111,20 @@ def test_blender_smoke_dry_run_uses_temp_home_and_lifecycle_stress_suite(tmp_pat
     assert "--background" in result.stdout
     assert "--factory-startup" in result.stdout
     assert "tests/blender/smoke_lifecycle_stress.py" in result.stdout.replace("\\", "/")
+    assert "HOME=" in result.stdout
+    assert "USERPROFILE=" in result.stdout
+    assert "BLENDER_USER_RESOURCES" in result.stdout
+
+
+def test_blender_smoke_dry_run_uses_temp_home_and_persistence_suite(tmp_path):
+    env = {**os.environ, "BLENDER_BIN": str(fake_blender(tmp_path))}
+    result = run_script(
+        "scripts/run_blender_smoke.py", "--suite", "persistence", "--dry-run", env=env
+    )
+    assert result.returncode == 0, result.stdout
+    assert "--background" in result.stdout
+    assert "--factory-startup" in result.stdout
+    assert "tests/blender/smoke_persistence.py" in result.stdout.replace("\\", "/")
     assert "HOME=" in result.stdout
     assert "USERPROFILE=" in result.stdout
     assert "BLENDER_USER_RESOURCES" in result.stdout
@@ -151,6 +166,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Split handlers, timers, activity tracking, scene snapshots, and debounce into runtime modules.",
         "- [x] Harden hot reload: repeated `register()` without `unregister()` and repeated `unregister()` must not leak or crash.",
         "- [x] Add repeated lifecycle stress smoke coverage.",
+        "- [x] Add `schema_version`, state model, and idempotent migrations.",
+        "- [x] Replace direct JSON writes with same-directory temp-file writes, flush/fsync, `os.replace`, and backup handling.",
+        "- [x] Add corrupt JSON quarantine/recovery behavior and fixtures for current schema migration.",
     ):
         assert phrase in plan_text
 
@@ -182,10 +200,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 5: Lifecycle And Event Layer",
-        "achievements/events.py",
-        "achievements/lifecycle.py",
-        "tests/blender/smoke_lifecycle_stress.py",
+        "Iteration 6: Persistence Hardening",
+        "achievements/persistence.py",
+        "tests/test_persistence.py",
         "__init__.py",
         "achievements_v01 (4).py",
         "README.md",
@@ -193,21 +210,21 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "docs/agent/verification.md",
         "scripts/verify_codex_plugin.py",
         "scripts/verify_frozen.py",
-        "scripts/run_blender_smoke.py",
-        "tests/test_events.py",
+        "tests/blender/smoke_persistence.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `achievements/events.py`",
-        "Added `achievements/lifecycle.py`",
-        "initial `unregister()` does not create `achievements_data.json`",
+        "Added `achievements/persistence.py`",
+        "schema_version `1.0.0`",
+        "same-directory atomic JSON writes",
+        "corrupt JSON quarantine/recovery",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
-        "Blender smoke suites `register` and `lifecycle_stress` passed",
+        "uv run python scripts/run_blender_smoke.py --suite persistence",
+        "Blender smoke suites `register`, `lifecycle_stress`, and `persistence` passed",
         "Final `/review` fallback status: PASS",
-        "Continue from Iteration 6: Persistence Hardening",
+        "Continue from Iteration 7: Engine And Rule Evaluation",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
