@@ -76,6 +76,8 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "package skeleton exists: achievements/__init__.py" in result.stdout
     assert "package metadata exists: achievements/metadata.py" in result.stdout
     assert "catalog module exists: achievements/catalog.py" in result.stdout
+    assert "event helpers exist: achievements/events.py" in result.stdout
+    assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -96,6 +98,20 @@ def test_blender_smoke_dry_run_uses_temp_home_and_register_suite(tmp_path):
     assert "--background" in result.stdout
     assert "--factory-startup" in result.stdout
     assert "tests/blender/smoke_register.py" in result.stdout.replace("\\", "/")
+    assert "BLENDER_USER_RESOURCES" in result.stdout
+
+
+def test_blender_smoke_dry_run_uses_temp_home_and_lifecycle_stress_suite(tmp_path):
+    env = {**os.environ, "BLENDER_BIN": str(fake_blender(tmp_path))}
+    result = run_script(
+        "scripts/run_blender_smoke.py", "--suite", "lifecycle_stress", "--dry-run", env=env
+    )
+    assert result.returncode == 0, result.stdout
+    assert "--background" in result.stdout
+    assert "--factory-startup" in result.stdout
+    assert "tests/blender/smoke_lifecycle_stress.py" in result.stdout.replace("\\", "/")
+    assert "HOME=" in result.stdout
+    assert "USERPROFILE=" in result.stdout
     assert "BLENDER_USER_RESOURCES" in result.stdout
 
 
@@ -132,6 +148,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Extract all achievement and lesson definitions into schema-driven catalog modules.",
         "- [x] Preserve IDs, Russian user-facing strings, categories, rewards, lesson links, and complex steps.",
         "- [x] Add catalog validators for IDs, counts, references, reward types, stat keys, and complex step coverage.",
+        "- [x] Split handlers, timers, activity tracking, scene snapshots, and debounce into runtime modules.",
+        "- [x] Harden hot reload: repeated `register()` without `unregister()` and repeated `unregister()` must not leak or crash.",
+        "- [x] Add repeated lifecycle stress smoke coverage.",
     ):
         assert phrase in plan_text
 
@@ -163,26 +182,32 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 4: Catalog Migration",
-        "achievements/catalog.py",
+        "Iteration 5: Lifecycle And Event Layer",
+        "achievements/events.py",
+        "achievements/lifecycle.py",
+        "tests/blender/smoke_lifecycle_stress.py",
         "__init__.py",
         "achievements_v01 (4).py",
         "README.md",
         "docs/agent/frozen-application-contract.md",
+        "docs/agent/verification.md",
         "scripts/verify_codex_plugin.py",
         "scripts/verify_frozen.py",
+        "scripts/run_blender_smoke.py",
+        "tests/test_events.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "catalog digest `db0e8d4bd5d596c9b0e54dac158a5c4742c33071a023914ee8287b01eea71e67`",
-        "Root add-on imports the catalog definitions",
-        "uv run pytest tests/test_infra_scripts.py::test_iteration_4_catalog_module_is_source_of_truth_and_safe_to_import tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract tests/test_infra_scripts.py::test_runtime_docs_alignment_matches_current_policy",
+        "Added `achievements/events.py`",
+        "Added `achievements/lifecycle.py`",
+        "initial `unregister()` does not create `achievements_data.json`",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "Blender smoke suites `register`, `persistence`, and `rewards` passed",
+        "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
+        "Blender smoke suites `register` and `lifecycle_stress` passed",
         "Final `/review` fallback status: PASS",
-        "Continue `codex/iteration-4-catalog-migration` from Iteration 5",
+        "Continue from Iteration 6: Persistence Hardening",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text

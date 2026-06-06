@@ -11,6 +11,7 @@ Blender discovery:
 
 Deep Blender gate:
 - `uv run python scripts/run_blender_smoke.py --suite register`
+- `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress`
 - `uv run python scripts/run_blender_smoke.py --suite persistence`
 - `uv run python scripts/run_blender_smoke.py --suite rewards`
 
@@ -27,5 +28,6 @@ Blender smoke rules:
 - Always run with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
 - Use background mode and factory startup.
 - Verify register/unregister lifecycle and cleanup.
+- Verify repeated register/unregister stress cleanup and hot-reload idempotency.
 - Verify persistence schema and hash migration under a temporary profile.
 - Verify material, mesh, and geo node reward fallbacks under a temporary profile.

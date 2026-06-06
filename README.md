@@ -43,6 +43,28 @@
 
 ---
 
+## Проверка разработки
+
+Быстрый gate перед сдачей:
+
+```bash
+uv run python scripts/verify_frozen.py
+uv run python scripts/verify_codex_plugin.py
+uv run ruff check .
+uv run pytest
+```
+
+Blender smoke запускается только через временные `HOME`, `USERPROFILE` и `BLENDER_USER_RESOURCES`; эти проверки не должны писать в реальный `~/BlenderAchievements`:
+
+```bash
+uv run python scripts/run_blender_smoke.py --suite register
+uv run python scripts/run_blender_smoke.py --suite lifecycle_stress
+uv run python scripts/run_blender_smoke.py --suite persistence
+uv run python scripts/run_blender_smoke.py --suite rewards
+```
+
+---
+
 ## Карта основных файлов
 
 | Строки        | Что содержит                                  | Для чего редактировать                |
@@ -53,6 +75,8 @@
 | **72–83**     | Уведомления (`NOTIFY_*`)                      | Размер/длительность уведомлений       |
 | **94**        | `_REWARD_SALT`                                | Соль хеша для защиты наград           |
 | `achievements/catalog.py` | Категории, `ACHIEVEMENTS_DEF`, `LESSONS_DEF`, валидаторы каталога | Добавить/переименовать категории, достижения, уроки |
+| `achievements/events.py` | Active-time, session, scene snapshot helpers | Править учет активности без импорта `bpy` |
+| `achievements/lifecycle.py` | Idempotent registration helpers | Править hot-reload lifecycle без прямого изменения handler/timer wiring |
 | **139–143**   | `DIFFICULTY_XP`                               | Очки XP за сложность                  |
 | **156–167**   | `LEVEL_TITLES`                                | Звания уровней                        |
 | **190–196**   | `_difficulty_label()`                         | Метки сложности на карточках           |
