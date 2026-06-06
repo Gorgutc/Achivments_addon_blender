@@ -6,6 +6,11 @@ Fast gate:
 - `uv run ruff check .`
 - `uv run pytest`
 
+GitHub Actions fast gate:
+- `.github/workflows/fast-gate.yml` mirrors the fast gate on Python 3.13.
+- The workflow runs on pull requests, pushes to `main`, and manual `workflow_dispatch`.
+- The workflow is blocking for PR readiness.
+
 Blender discovery:
 - `uv run python scripts/find_blender.py`
 
@@ -16,6 +21,13 @@ Deep Blender gate:
 - `uv run python scripts/run_blender_smoke.py --suite engine`
 - `uv run python scripts/run_blender_smoke.py --suite rewards`
 - `uv run python scripts/run_blender_smoke.py --suite ui_visual`
+
+GitHub Actions Blender smoke:
+- `.github/workflows/blender-smoke.yml` runs on pull requests, pushes to `main`, and manual `workflow_dispatch`.
+- `blender-5-1-stable` downloads Blender 5.1.2 from the official Blender 5.1 release path and is blocking.
+- `blender-5-2-alpha-canary` reads the download URL from repository variable `BLENDER_5_2_ALPHA_URL` and is non-blocking through `continue-on-error`.
+- Both matrix targets run the same smoke suites: `register`, `lifecycle_stress`, `persistence`, `engine`, `rewards`, and `ui_visual`.
+- Blender smoke jobs set `BLENDER_BIN`; the smoke runner still creates temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` for each suite.
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.

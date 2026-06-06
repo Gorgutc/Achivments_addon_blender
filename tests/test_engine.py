@@ -69,6 +69,16 @@ def test_stat_evaluation_and_progress_are_clamped_and_report_proof():
     assert progress.bar == "██████████"
 
 
+def test_ratio_and_progress_bar_helpers_clamp_edge_values():
+    from achievements import engine
+
+    assert engine.clamp_ratio(-5, 10) == 0.0
+    assert engine.clamp_ratio(5, 0) == 0.0
+    assert engine.clamp_ratio(25, 10) == 1.0
+    assert engine.progress_bar(-1, bar_len=4) == engine.EMPTY_BAR * 4
+    assert engine.progress_bar(2, bar_len=4) == engine.FILLED_BAR * 4
+
+
 def test_complex_evaluation_uses_step_callback_and_reports_progress():
     from achievements import engine
 
@@ -109,6 +119,32 @@ def test_complex_evaluation_uses_step_callback_and_reports_progress():
     assert progress.total_count == 2
     assert progress.ratio == 0.5
     assert progress.percent == 50
+
+
+def test_complex_achievement_without_steps_never_unlocks():
+    from achievements import engine
+
+    ach = {
+        "id": "empty_complex",
+        "check_type": "complex",
+        "complex_id": "empty_complex",
+        "steps": [],
+    }
+
+    result = engine.evaluate_complex_achievement(
+        ach,
+        step_evaluator=lambda _complex_id, _step_check: True,
+    )
+    progress = engine.complex_progress(
+        ach,
+        step_evaluator=lambda _complex_id, _step_check: True,
+    )
+
+    assert not result.achieved
+    assert result.proofs == ()
+    assert progress.done_count == 0
+    assert progress.total_count == 0
+    assert progress.ratio == 0.0
 
 
 def test_engine_selects_pending_stat_and_complex_unlocks():

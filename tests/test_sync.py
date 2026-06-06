@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -95,6 +97,27 @@ def test_sync_change_snapshots_mutable_payloads():
 
     pending = queue.pending()[0]
     assert pending.payload == {"unlocked": ("first_vertex",)}
+
+
+def test_sync_change_recursively_freezes_payloads_and_sorts_sets():
+    payload = {
+        "stats": {"vertices_created": 1},
+        "unlocked": {"b", "a"},
+        "nested": {"items": [{"id": "first_vertex"}]},
+    }
+    change = make_change("nested-freeze", payload=payload)
+
+    payload["stats"]["vertices_created"] = 99
+    payload["unlocked"].add("c")
+    payload["nested"]["items"][0]["id"] = "mutated"
+
+    assert change.payload["stats"]["vertices_created"] == 1
+    assert change.payload["unlocked"] == ("a", "b")
+    assert change.payload["nested"]["items"][0]["id"] == "first_vertex"
+    with pytest.raises(TypeError):
+        change.payload["stats"] = {}
+    with pytest.raises(TypeError):
+        change.payload["stats"]["vertices_created"] = 2
 
 
 def test_pinned_ui_state_is_excluded_from_sync_payload():

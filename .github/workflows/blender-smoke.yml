@@ -1,0 +1,76 @@
+name: Achievements Blender Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blender-smoke:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.canary }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: blender-5-1-stable
+            blender_url: https://download.blender.org/release/Blender5.1/blender-5.1.2-linux-x64.tar.xz
+            canary: false
+          - name: blender-5-2-alpha-canary
+            blender_url: ${{ vars.BLENDER_5_2_ALPHA_URL }}
+            canary: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Blender
+        shell: bash
+        env:
+          BLENDER_DOWNLOAD_URL: ${{ matrix.blender_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BLENDER_DOWNLOAD_URL}" ]; then
+            echo "::error::Missing Blender download URL for ${{ matrix.name }}"
+            exit 1
+          fi
+          mkdir -p .ci/blender
+          curl --fail --location --retry 3 "${BLENDER_DOWNLOAD_URL}" --output .ci/blender/blender.tar.xz
+          tar -xf .ci/blender/blender.tar.xz -C .ci/blender --strip-components=1
+          echo "BLENDER_BIN=${PWD}/.ci/blender/blender" >> "${GITHUB_ENV}"
+
+      - name: Run register smoke
+        run: uv run python scripts/run_blender_smoke.py --suite register
+
+      - name: Run lifecycle smoke
+        run: uv run python scripts/run_blender_smoke.py --suite lifecycle_stress
+
+      - name: Run persistence smoke
+        run: uv run python scripts/run_blender_smoke.py --suite persistence
+
+      - name: Run engine smoke
+        run: uv run python scripts/run_blender_smoke.py --suite engine
+
+      - name: Run rewards smoke
+        run: uv run python scripts/run_blender_smoke.py --suite rewards
+
+      - name: Run UI visual smoke
+        run: uv run python scripts/run_blender_smoke.py --suite ui_visual
