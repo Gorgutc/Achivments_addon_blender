@@ -3,6 +3,7 @@
 Аддон геймификации для Blender 5.0+.
 Основная проверяемая среда — Blender 5.1 stable; Blender 5.2 alpha используется как canary.
 105 достижений, 9 уроков, XP-система с 10 уровнями, награды.
+Каталог достижений и уроков теперь находится в `achievements/catalog.py`; корневой `__init__.py` остаётся Blender runtime entrypoint и импортирует legacy-имена каталога для совместимости.
 
 ---
 
@@ -13,9 +14,9 @@
 2. Выбрать release ZIP, подготовленный отдельной release-задачей. В текущем репозитории ZIP-артефакт не хранится.
 3. Включить галочку «Achievements»
 
-### Вариант 2 — Одиночный .py файл для ручной локальной проверки
+### Вариант 2 — Локальная проверка из рабочей папки
 1. `Edit → Preferences → Add-ons → Install from Disk...`
-2. Выбрать файл `__init__.py`. В репозитории он остаётся canonical entry point и не переименовывается.
+2. Использовать папку/пакет, где рядом с корневым `__init__.py` есть пакет `achievements/`. Один файл `__init__.py` больше не является полной локальной установкой после миграции каталога.
 3. Включить галочку «Achievements»
 
 ---
@@ -42,7 +43,7 @@
 
 ---
 
-## Карта файла `__init__.py`
+## Карта основных файлов
 
 | Строки        | Что содержит                                  | Для чего редактировать                |
 |---------------|-----------------------------------------------|---------------------------------------|
@@ -51,12 +52,10 @@
 | **58–66**     | Сетка карточек (`GRID_COLS`, `PAGE_SIZE`)     | Кол-во столбцов/строк в окне          |
 | **72–83**     | Уведомления (`NOTIFY_*`)                      | Размер/длительность уведомлений       |
 | **94**        | `_REWARD_SALT`                                | Соль хеша для защиты наград           |
-| **111–132**   | Категории                                     | Добавить/переименовать категории      |
+| `achievements/catalog.py` | Категории, `ACHIEVEMENTS_DEF`, `LESSONS_DEF`, валидаторы каталога | Добавить/переименовать категории, достижения, уроки |
 | **139–143**   | `DIFFICULTY_XP`                               | Очки XP за сложность                  |
 | **156–167**   | `LEVEL_TITLES`                                | Звания уровней                        |
 | **190–196**   | `_difficulty_label()`                         | Метки сложности на карточках           |
-| **251–357**   | **`ACHIEVEMENTS_DEF`**                        | ✦ Все 105 достижений                  |
-| **373–409**   | **`LESSONS_DEF`**                             | ✦ Все уроки                           |
 | **449**       | `_IDLE_TIMEOUT`                               | Тайм-аут бездействия (сек.)           |
 | **813–1527**  | `_check_complex_step()`                       | Логика проверки комплексных достижений |
 
@@ -66,7 +65,7 @@
 
 ### 1.1 Названия и описания достижений
 
-**Строки 251–357** — массив `ACHIEVEMENTS_DEF`
+**Файл `achievements/catalog.py`** — массив `ACHIEVEMENTS_DEF`
 
 ```python
 {
@@ -87,7 +86,7 @@
 
 ### 1.2 Названия категорий
 
-**Строки 111–132:**
+**Файл `achievements/catalog.py`:**
 ```python
 ACH_CATEGORIES = [
     ("EDITING",    "Редактирование"),   # ← Второй элемент — отображаемое имя
@@ -152,7 +151,7 @@ items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
 
 ### 2.2 Иконки уроков
 
-**Строки 373–409** — поле `"icon"` в `LESSONS_DEF`:
+**Файл `achievements/catalog.py`** — поле `"icon"` в `LESSONS_DEF`:
 ```python
 "icon": "lesson_verts.png"   # файл из textures/
 ```
@@ -172,7 +171,7 @@ items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
 
 ### 3.1 URL уроков
 
-**Строки 373–409** — массив `LESSONS_DEF`:
+**Файл `achievements/catalog.py`** — массив `LESSONS_DEF`:
 ```python
 {
     "id": "lesson_vertices_basics",
@@ -196,7 +195,7 @@ items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
 
 **Быстрый поиск всех URL:**
 ```bash
-grep -n '"url"' __init__.py
+grep -n '"url"' achievements/catalog.py
 ```
 
 ---
@@ -288,7 +287,7 @@ grep -n '"url"' __init__.py
 
 ### Стат-достижение (подсчёт статистики)
 
-Добавьте словарь в `ACHIEVEMENTS_DEF` (строки 251–357):
+Добавьте словарь в `ACHIEVEMENTS_DEF` в `achievements/catalog.py`:
 
 ```python
 {
@@ -355,19 +354,19 @@ if step_check == "my_custom_check":
 
 ```bash
 # Все русские тексты:
-grep -n '[А-Яа-яЁё]' __init__.py
+grep -n '[А-Яа-яЁё]' achievements/catalog.py
 
 # Все URL:
-grep -n 'http' __init__.py
+grep -n 'http' achievements/catalog.py
 
 # Все .blend файлы наград:
-grep -n 'blend_file' __init__.py
+grep -n 'blend_file' achievements/catalog.py
 
 # Все иконки:
-grep -n 'icon_gray\|icon_color' __init__.py
+grep -n 'icon_gray\|icon_color' achievements/catalog.py
 
 # Все stat_key:
-grep -n 'stat_key' __init__.py
+grep -n 'stat_key' achievements/catalog.py
 
 # Все проверки комплексных шагов:
 grep -n 'step_check ==' __init__.py

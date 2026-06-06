@@ -12,6 +12,10 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 ADDON = ROOT / "__init__.py"
 DUPLICATE_ADDON = ROOT / "achievements_v01 (4).py"
+sys.path.insert(0, str(ROOT))
+
+from achievements import catalog  # noqa: E402
+
 USER_DATA_MARKERS = {"achievements_data.json", "BlenderAchievements"}
 VALID_CHECK_TYPES = {"stat", "complex"}
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
@@ -224,17 +228,36 @@ def addon_tree() -> ast.Module:
 def assignment_dict(module: ast.Module) -> dict[str, Any]:
     names = [
         "bl_info",
+        "DIFFICULTY_XP",
+        "LEVEL_TITLES",
+    ]
+    values = {name: literal_assignment(module, name) for name in names}
+    values.update(
+        {
+            "ACHIEVEMENTS_DEF": catalog.ACHIEVEMENTS_DEF,
+            "LESSONS_DEF": catalog.LESSONS_DEF,
+            "ACH_CATEGORIES": catalog.ACH_CATEGORIES,
+            "LESSON_CATEGORIES": catalog.LESSON_CATEGORIES,
+            "REWARD_CATEGORIES": catalog.REWARD_CATEGORIES,
+        }
+    )
+    values.update(constant_assignments(module, set(FROZEN_CONSTANTS)))
+    return values
+
+
+def imports_catalog_definitions(module: ast.Module) -> bool:
+    required = {
         "ACHIEVEMENTS_DEF",
         "LESSONS_DEF",
         "ACH_CATEGORIES",
         "LESSON_CATEGORIES",
         "REWARD_CATEGORIES",
-        "DIFFICULTY_XP",
-        "LEVEL_TITLES",
-    ]
-    values = {name: literal_assignment(module, name) for name in names}
-    values.update(constant_assignments(module, set(FROZEN_CONSTANTS)))
-    return values
+    }
+    imported: set[str] = set()
+    for node in module.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "achievements.catalog":
+            imported.update(alias.name for alias in node.names)
+    return required <= imported
 
 
 def function_source(name: str) -> str:
@@ -328,6 +351,14 @@ def verify_addon_contract() -> None:
     }
 
     record("addon parses as AST without importing bpy", isinstance(module, ast.Module))
+    record("addon imports catalog definitions", imports_catalog_definitions(module))
+    catalog_errors = catalog.validate_catalog()
+    record("catalog module validates", not catalog_errors, ", ".join(catalog_errors[:10]))
+    record(
+        "catalog digest frozen",
+        catalog.catalog_digest() == catalog.FROZEN_CATALOG_DIGEST,
+        catalog.catalog_digest(),
+    )
     record("bl_info exists", values["bl_info"].get("name") == "Achievements")
     record("bl_info current known drift preserved", values["bl_info"].get("blender") == (4, 5, 0))
     record("achievement count is 105", len(achievements) == 105, str(len(achievements)))

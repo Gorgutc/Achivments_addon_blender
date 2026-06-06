@@ -63,6 +63,7 @@ REQUIRED_INFRA_FILES = [
     ".codex/config.toml",
     ".codex/hooks.json",
     "achievements/__init__.py",
+    "achievements/catalog.py",
     "achievements/metadata.py",
     "blender_manifest.toml",
     "pyproject.toml",
@@ -199,9 +200,11 @@ def verify_docs() -> None:
 def verify_extension_draft() -> None:
     manifest = ROOT / "blender_manifest.toml"
     package_init = ROOT / "achievements" / "__init__.py"
+    catalog = ROOT / "achievements" / "catalog.py"
     package_metadata = ROOT / "achievements" / "metadata.py"
     record("extension draft exists: blender_manifest.toml", manifest.is_file())
     record("package skeleton exists: achievements/__init__.py", package_init.is_file())
+    record("catalog module exists: achievements/catalog.py", catalog.is_file())
     record("package metadata exists: achievements/metadata.py", package_metadata.is_file())
 
 

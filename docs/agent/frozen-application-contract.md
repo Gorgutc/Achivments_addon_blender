@@ -4,10 +4,11 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 ## Source Of Truth
 
-- Canonical add-on source: `__init__.py`.
+- Canonical add-on runtime entrypoint: `__init__.py`.
+- Catalog source of truth: `achievements/catalog.py`.
 - Tracked duplicate: `achievements_v01 (4).py`; it is a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task.
 - Stale reference file: `achievements_100_list.md` documents an older 100-achievement design and is not the current source of truth.
-- README is useful orientation but the executable contract is the add-on code plus this frozen contract.
+- README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
 - Source strings are UTF-8 Russian user-facing text. Mojibake in terminal output is a display/encoding artifact, not permission to normalize or rewrite all text.
 
 ## Application Identity
@@ -22,8 +23,8 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 ## Catalog Freeze
 
-- Achievements: 105 total.
-- Lessons: 9 total.
+- Achievements: 105 total in `achievements/catalog.py`.
+- Lessons: 9 total in `achievements/catalog.py`.
 - Achievement check types: 40 `stat`, 65 `complex`.
 - Complex steps: 85 total, with 1 to 4 steps per complex achievement.
 - Achievement categories: `EDITING` 45, `MATERIALS` 17, `RENDERING` 17, `TIME` 12, `GEO_NODES` 14.
@@ -33,7 +34,7 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 - Reward category counts in achievements: `MESHES` 38, `SHADERS` 49, `GEO_NODES` 18.
 - Reward categories declared by UI: `MESHES`, `GEO_NODES`, `SHADERS`, `COMPOSITOR`. `COMPOSITOR` currently has zero achievement entries and must not be removed casually.
 
-Do not reorder, rename, or delete IDs, category keys, stat keys, complex IDs, reward categories, lesson IDs, or achievement IDs unless the task explicitly asks for catalog migration.
+Do not reorder, rename, or delete IDs, category keys, stat keys, complex IDs, reward categories, lesson IDs, or achievement IDs unless the task explicitly asks for a catalog behavior change.
 
 ## Achievement Schema
 
@@ -255,7 +256,7 @@ Before editing add-on behavior:
 
 ## Required Verification Coverage
 
-- `verify_frozen.py` freezes counts, schema keys, UI/runtime constants, top-level function map, class map, registered classes, duplicate hash, tracked-data safety, and this contract.
+- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, duplicate hash, tracked-data safety, and this contract.
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, and unlock-hash migration.
