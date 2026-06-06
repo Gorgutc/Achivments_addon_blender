@@ -7,6 +7,7 @@ Authoritative commands:
 - `uv run python scripts/verify_codex_plugin.py`
 - `uv run python scripts/find_blender.py`
 - `uv run python scripts/run_blender_smoke.py --suite register`
+- `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress`
 - `uv run ruff check .`
 - `uv run pytest`
 

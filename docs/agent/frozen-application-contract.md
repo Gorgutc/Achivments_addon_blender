@@ -179,7 +179,7 @@ Registration registers:
 - `VIEW3D_HT_header` draw callback.
 - Two `SpaceView3D` GPU draw handlers.
 
-Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke.
+Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke. The root entrypoint delegates idempotent class, Scene property, handler, timer, header, and draw-handler wiring to `achievements/lifecycle.py`; activity/session tracking and cached scene snapshot resets delegate to `achievements/events.py`.
 
 ## Function Map
 
@@ -242,6 +242,18 @@ UI helpers:
 - `_draw_header_button`
 
 Lifecycle:
+- `_base_scene_properties`
+- `_category_scene_properties`
+- `_scene_property_names`
+- `_register_scene_properties`
+- `_unregister_scene_properties`
+- `_handler_pairs`
+- `_register_handlers`
+- `_unregister_handlers`
+- `_register_timers`
+- `_unregister_timers`
+- `_register_draw_handlers`
+- `_unregister_draw_handlers`
 - `register`
 - `unregister`
 
@@ -259,5 +271,6 @@ Before editing add-on behavior:
 - `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, duplicate hash, tracked-data safety, and this contract.
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
+- Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, and unlock-hash migration.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior.

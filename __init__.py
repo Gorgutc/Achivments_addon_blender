@@ -120,6 +120,8 @@ from achievements.catalog import (
     LESSON_CATEGORIES,
     REWARD_CATEGORIES,
 )
+from achievements import events as ach_events
+from achievements import lifecycle as ach_lifecycle
 
 
 
@@ -237,34 +239,13 @@ _IDLE_TIMEOUT = 120  # 2 minutes
 
 
 def _on_user_activity():
-    """Called from depsgraph handler when real user changes are detected.
-    Accumulates only *active* work time — idle stretches are ignored."""
-    now = time.time()
-    if stats._last_activity > 0:
-        gap = now - stats._last_activity
-        if gap <= _IDLE_TIMEOUT:
-            stats.time_spent += int(gap)
-    stats._last_activity = now
+    """Called from depsgraph handler when real user changes are detected."""
+    ach_events.record_user_activity(stats, now=time.time(), idle_timeout=_IDLE_TIMEOUT)
 
 
 def _flush_session_time():
-    """Finalize the current activity window (called on save / timer).
-    Counts the tail only if user was recently active."""
-    now = time.time()
-    if stats._last_activity > 0:
-        gap = now - stats._last_activity
-        if gap <= _IDLE_TIMEOUT:
-            stats.time_spent += int(gap)
-            stats._last_activity = now
-    # Track daily session for streak achievements
-    import datetime
-    today = datetime.date.today().isoformat()
-    stats._session_date = today
-    if today not in stats.daily_sessions:
-        stats.daily_sessions.append(today)
-        # Keep only last 60 days to avoid unbounded growth
-        if len(stats.daily_sessions) > 60:
-            stats.daily_sessions = stats.daily_sessions[-60:]
+    """Finalize the current activity window (called on save / timer)."""
+    ach_events.flush_session_time(stats, now=time.time(), idle_timeout=_IDLE_TIMEOUT)
 
 
 def save_data():
@@ -339,6 +320,8 @@ def load_data():
 _pending_notifications = []
 _draw_handler = None
 _draw_handler_pin = None
+_header_button_registered = False
+_addon_registered = False
 
 
 def _add_notification(ach):
@@ -1429,13 +1412,9 @@ def on_depsgraph_update(scene, depsgraph):
 def on_load_post(dummy=None):
     """Re-load data when a new .blend file is opened."""
     load_data()
-    stats._session_start = time.time()
-    stats._last_activity = time.time()  # mark initial activity
-    stats._time_at_session_start = stats.time_spent
-    stats._prev_verts.clear()
-    stats._prev_edges.clear()
-    stats._prev_faces.clear()
-    stats._prev_mats.clear()
+    now = time.time()
+    ach_events.reset_session_tracking(stats, now=now)
+    ach_events.reset_scene_snapshots(stats)
 
 
 @persistent
@@ -2105,118 +2084,134 @@ _classes = (
 )
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def _base_scene_properties():
+    return {
+        "ach_tab": bpy.props.EnumProperty(
+            items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
+                   ("LESSONS", "Уроки", ""), ("STORAGE", "Хранилище", "")],
+            default="TASKS"),
+        "ach_page_tasks": bpy.props.IntProperty(default=0, min=0),
+        "ach_page_done": bpy.props.IntProperty(default=0, min=0),
+        "ach_page_lessons": bpy.props.IntProperty(default=0, min=0),
+        "ach_page_storage": bpy.props.IntProperty(default=0, min=0),
+    }
 
-    bpy.types.Scene.ach_tab = bpy.props.EnumProperty(
-        items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
-               ("LESSONS", "Уроки", ""), ("STORAGE", "Хранилище", "")],
-        default="TASKS")
-    bpy.types.Scene.ach_page_tasks   = bpy.props.IntProperty(default=0, min=0)
-    bpy.types.Scene.ach_page_done    = bpy.props.IntProperty(default=0, min=0)
-    bpy.types.Scene.ach_page_lessons = bpy.props.IntProperty(default=0, min=0)
-    bpy.types.Scene.ach_page_storage = bpy.props.IntProperty(default=0, min=0)
 
-    # Accordion: Bool for expand/collapse + Int for per-category pagination
+def _category_scene_properties():
+    props = {}
     for cat_id, _ in ACH_CATEGORIES:
-        setattr(bpy.types.Scene, f"ach_acc_tasks_{cat_id}",
-                bpy.props.BoolProperty(default=(cat_id == "EDITING")))
-        setattr(bpy.types.Scene, f"ach_acc_done_{cat_id}",
-                bpy.props.BoolProperty(default=False))
-        setattr(bpy.types.Scene, f"ach_acc_lessons_{cat_id}",
-                bpy.props.BoolProperty(default=False))
-        setattr(bpy.types.Scene, f"ach_page_tasks_{cat_id.lower()}",
-                bpy.props.IntProperty(default=0, min=0))
-        setattr(bpy.types.Scene, f"ach_page_done_{cat_id.lower()}",
-                bpy.props.IntProperty(default=0, min=0))
-        setattr(bpy.types.Scene, f"ach_page_lessons_{cat_id.lower()}",
-                bpy.props.IntProperty(default=0, min=0))
+        props.update({
+            f"ach_acc_tasks_{cat_id}": bpy.props.BoolProperty(default=(cat_id == "EDITING")),
+            f"ach_acc_done_{cat_id}": bpy.props.BoolProperty(default=False),
+            f"ach_acc_lessons_{cat_id}": bpy.props.BoolProperty(default=False),
+            f"ach_page_tasks_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
+            f"ach_page_done_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
+            f"ach_page_lessons_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
+        })
     for cat_id, _ in REWARD_CATEGORIES:
-        setattr(bpy.types.Scene, f"ach_acc_storage_{cat_id}",
-                bpy.props.BoolProperty(default=False))
-        setattr(bpy.types.Scene, f"ach_page_storage_{cat_id.lower()}",
-                bpy.props.IntProperty(default=0, min=0))
+        props.update({
+            f"ach_acc_storage_{cat_id}": bpy.props.BoolProperty(default=False),
+            f"ach_page_storage_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
+        })
+    return props
+
+
+def _scene_property_names():
+    return [*_base_scene_properties(), *_category_scene_properties()]
+
+
+def _register_scene_properties():
+    for name, prop in {**_base_scene_properties(), **_category_scene_properties()}.items():
+        ach_lifecycle.set_scene_property_once(bpy, name, prop)
+
+
+def _unregister_scene_properties():
+    for name in _scene_property_names():
+        ach_lifecycle.delete_scene_property_if_present(bpy, name)
+
+
+def _handler_pairs():
+    return (
+        (bpy.app.handlers.depsgraph_update_post, on_depsgraph_update),
+        (bpy.app.handlers.load_post, on_load_post),
+        (bpy.app.handlers.save_pre, on_save_pre),
+        (bpy.app.handlers.render_complete, on_render_complete),
+    )
+
+
+def _register_handlers():
+    for collection, callback in _handler_pairs():
+        ach_lifecycle.append_handler_once(collection, callback)
+
+
+def _unregister_handlers():
+    for collection, callback in _handler_pairs():
+        ach_lifecycle.remove_handler_all(collection, callback)
+
+
+def _register_timers():
+    ach_lifecycle.register_timer_once(
+        bpy, _timer_tick, first_interval=60.0, persistent=True)
+    ach_lifecycle.register_timer_once(
+        bpy, _notification_redraw_tick, first_interval=1.0, persistent=True)
+
+
+def _unregister_timers():
+    ach_lifecycle.unregister_timer_if_registered(bpy, _timer_tick)
+    ach_lifecycle.unregister_timer_if_registered(bpy, _notification_redraw_tick)
+
+
+def _register_draw_handlers():
+    global _draw_handler, _draw_handler_pin, _header_button_registered
+    if not _header_button_registered:
+        ach_lifecycle.append_header_once(bpy.types.VIEW3D_HT_header, _draw_header_button)
+        _header_button_registered = True
+    _draw_handler = ach_lifecycle.add_draw_handler_once(
+        bpy, _draw_handler, _draw_notifications)
+    _draw_handler_pin = ach_lifecycle.add_draw_handler_once(
+        bpy, _draw_handler_pin, _draw_pinned_achievement)
+
+
+def _unregister_draw_handlers():
+    global _draw_handler, _draw_handler_pin, _header_button_registered
+    ach_lifecycle.remove_draw_handler_if_present(bpy, _draw_handler)
+    _draw_handler = None
+    ach_lifecycle.remove_draw_handler_if_present(bpy, _draw_handler_pin)
+    _draw_handler_pin = None
+    ach_lifecycle.remove_header_all(bpy.types.VIEW3D_HT_header, _draw_header_button)
+    _header_button_registered = False
+
+
+def register():
+    global _addon_registered
+    ach_lifecycle.register_classes(bpy, _classes)
+    _register_scene_properties()
 
     load_data()
-    stats._session_start = time.time()
-    stats._last_activity = time.time()
-    stats._time_at_session_start = stats.time_spent
-    # Speed modeler tracking init
-    stats._speed_model_start = time.time()
-    stats._speed_model_verts = stats.vertices_created
+    now = time.time()
+    ach_events.reset_session_tracking(stats, now=now)
+    ach_events.reset_speed_model_tracking(stats, now=now)
 
-    # Register handlers
-    if on_depsgraph_update not in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(on_depsgraph_update)
-    if on_load_post not in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.append(on_load_post)
-    if on_save_pre not in bpy.app.handlers.save_pre:
-        bpy.app.handlers.save_pre.append(on_save_pre)
-    if on_render_complete not in bpy.app.handlers.render_complete:
-        bpy.app.handlers.render_complete.append(on_render_complete)
-
-    # Register timers
-    bpy.app.timers.register(_timer_tick, first_interval=60.0, persistent=True)
-    bpy.app.timers.register(_notification_redraw_tick, first_interval=1.0, persistent=True)
-    bpy.types.VIEW3D_HT_header.append(_draw_header_button)
-
-    # Register GPU draw handlers
-    global _draw_handler, _draw_handler_pin
-    _draw_handler = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_notifications, (), 'WINDOW', 'POST_PIXEL')
-    _draw_handler_pin = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_pinned_achievement, (), 'WINDOW', 'POST_PIXEL')
+    _register_handlers()
+    _register_timers()
+    _register_draw_handlers()
+    _addon_registered = True
 
     print("[Achievements] v0.1 — registered! (100 achievements + XP)")
     print(f"[Achievements] Data: {DATA_FILE}")
 
 
 def unregister():
-    global _draw_handler, _draw_handler_pin
-    save_data()
-    if _draw_handler is not None:
-        bpy.types.SpaceView3D.draw_handler_remove(_draw_handler, 'WINDOW')
-        _draw_handler = None
-    if _draw_handler_pin is not None:
-        bpy.types.SpaceView3D.draw_handler_remove(_draw_handler_pin, 'WINDOW')
-        _draw_handler_pin = None
-    bpy.types.VIEW3D_HT_header.remove(_draw_header_button)
-    if bpy.app.timers.is_registered(_timer_tick):
-        bpy.app.timers.unregister(_timer_tick)
-    if bpy.app.timers.is_registered(_notification_redraw_tick):
-        bpy.app.timers.unregister(_notification_redraw_tick)
-    if on_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(on_depsgraph_update)
-    if on_load_post in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.remove(on_load_post)
-    if on_save_pre in bpy.app.handlers.save_pre:
-        bpy.app.handlers.save_pre.remove(on_save_pre)
-    if on_render_complete in bpy.app.handlers.render_complete:
-        bpy.app.handlers.render_complete.remove(on_render_complete)
-    for pcoll in preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
-    preview_collections.clear()
-    for cls in reversed(_classes):
-        bpy.utils.unregister_class(cls)
-
-    # Cleanup scene properties
-    del bpy.types.Scene.ach_tab
-    del bpy.types.Scene.ach_page_tasks
-    del bpy.types.Scene.ach_page_done
-    del bpy.types.Scene.ach_page_lessons
-    del bpy.types.Scene.ach_page_storage
-    for cat_id, _ in ACH_CATEGORIES:
-        for prefix in ("ach_acc_tasks_", "ach_acc_done_", "ach_acc_lessons_",
-                        "ach_page_tasks_", "ach_page_done_", "ach_page_lessons_"):
-            attr = f"{prefix}{cat_id}" if "acc" in prefix else f"{prefix}{cat_id.lower()}"
-            if hasattr(bpy.types.Scene, attr):
-                delattr(bpy.types.Scene, attr)
-    for cat_id, _ in REWARD_CATEGORIES:
-        for prefix in ("ach_acc_storage_", "ach_page_storage_"):
-            attr = f"{prefix}{cat_id}" if "acc" in prefix else f"{prefix}{cat_id.lower()}"
-            if hasattr(bpy.types.Scene, attr):
-                delattr(bpy.types.Scene, attr)
+    global _addon_registered
+    if _addon_registered:
+        save_data()
+    _unregister_draw_handlers()
+    _unregister_timers()
+    _unregister_handlers()
+    ach_lifecycle.clear_preview_collections(bpy, preview_collections)
+    ach_lifecycle.unregister_classes(bpy, _classes)
+    _unregister_scene_properties()
+    _addon_registered = False
     print("[Achievements] v0.1 — unregistered")
 
 

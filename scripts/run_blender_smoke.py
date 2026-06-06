@@ -11,6 +11,7 @@ from find_blender import find_blender
 
 ROOT = Path(__file__).resolve().parents[1]
 SUITES = {
+    "lifecycle_stress": ROOT / "tests" / "blender" / "smoke_lifecycle_stress.py",
     "persistence": ROOT / "tests" / "blender" / "smoke_persistence.py",
     "register": ROOT / "tests" / "blender" / "smoke_register.py",
     "rewards": ROOT / "tests" / "blender" / "smoke_rewards.py",

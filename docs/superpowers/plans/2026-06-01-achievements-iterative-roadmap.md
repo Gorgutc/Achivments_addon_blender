@@ -90,9 +90,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 5: Lifecycle And Event Layer
 
-- [ ] Split handlers, timers, activity tracking, scene snapshots, and debounce into runtime modules.
-- [ ] Harden hot reload: repeated `register()` without `unregister()` and repeated `unregister()` must not leak or crash.
-- [ ] Add repeated lifecycle stress smoke coverage.
+- [x] Split handlers, timers, activity tracking, scene snapshots, and debounce into runtime modules.
+- [x] Harden hot reload: repeated `register()` without `unregister()` and repeated `unregister()` must not leak or crash.
+- [x] Add repeated lifecycle stress smoke coverage.
 
 **Acceptance:** `register`, repeated lifecycle stress, and cleanup assertions pass with no duplicate header, timer, or draw handlers.
 

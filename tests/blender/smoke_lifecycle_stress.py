@@ -9,7 +9,7 @@ import bpy
 
 ROOT = Path(os.environ["ACHIEVEMENTS_ADDON_ROOT"])
 ADDON_PATH = ROOT / "__init__.py"
-MODULE_NAME = "achievements_blender_smoke_addon"
+MODULE_NAME = "achievements_blender_smoke_lifecycle_addon"
 BASE_SCENE_PROPS = [
     "ach_tab",
     "ach_page_tasks",
@@ -20,7 +20,7 @@ BASE_SCENE_PROPS = [
 
 
 def fail(message: str) -> None:
-    print(f"[smoke_register:FAIL] {message}")
+    print(f"[smoke_lifecycle_stress:FAIL] {message}")
     raise SystemExit(1)
 
 
@@ -68,53 +68,95 @@ def header_callbacks():
     return list(callbacks)
 
 
-def main() -> None:
-    module = load_addon()
-    data_dir = Path(module.DATA_DIR)
-    expected_home = Path(os.environ["USERPROFILE"])
-    if expected_home not in data_dir.parents and data_dir != expected_home:
-        fail(f"DATA_DIR is outside temp home: {data_dir}")
-
-    module.register()
+def assert_registered_once(module):
     missing_props = [prop for prop in scene_props(module) if not hasattr(bpy.types.Scene, prop)]
     if missing_props:
-        fail(f"register did not create Scene props: {missing_props[:5]}")
+        fail(f"missing Scene props after register: {missing_props[:5]}")
     for callback, collection, name in handler_pairs(module):
-        if callback not in collection:
-            fail(f"{name} handler missing after register")
-    if not bpy.app.timers.is_registered(module._timer_tick):
-        fail("timer tick missing after register")
-    if not bpy.app.timers.is_registered(module._notification_redraw_tick):
-        fail("notification redraw timer missing after register")
-    callbacks = header_callbacks()
-    if callbacks and module._draw_header_button not in callbacks:
-        fail("header callback missing after register")
+        count = collection.count(callback)
+        if count != 1:
+            fail(f"{name} handler count is {count}, expected 1")
+    header_count = header_callbacks().count(module._draw_header_button)
+    if header_count > 1:
+        fail(f"header callback duplicated: {header_count}")
     if not module._header_button_registered:
         fail("header registration flag missing after register")
     if not module._addon_registered:
         fail("addon registration flag missing after register")
+    if not bpy.app.timers.is_registered(module._timer_tick):
+        fail("timer tick missing after register")
+    if not bpy.app.timers.is_registered(module._notification_redraw_tick):
+        fail("notification redraw timer missing after register")
+    if module._draw_handler is None:
+        fail("notification draw handler missing after register")
+    if module._draw_handler_pin is None:
+        fail("pinned draw handler missing after register")
 
-    module.unregister()
+
+def assert_draw_handlers_unchanged(module, handles):
+    draw_handler, draw_handler_pin = handles
+    if module._draw_handler != draw_handler:
+        fail("notification draw handler changed after repeated register")
+    if module._draw_handler_pin != draw_handler_pin:
+        fail("pinned draw handler changed after repeated register")
+
+
+def assert_unregistered(module):
     remaining_props = [prop for prop in scene_props(module) if hasattr(bpy.types.Scene, prop)]
     if remaining_props:
-        fail(f"unregister did not remove Scene props: {remaining_props[:5]}")
+        fail(f"remaining Scene props after unregister: {remaining_props[:5]}")
     for callback, collection, name in handler_pairs(module):
         if callback in collection:
             fail(f"{name} handler still registered after unregister")
-    if bpy.app.timers.is_registered(module._timer_tick):
-        fail("timer tick still registered after unregister")
-    if bpy.app.timers.is_registered(module._notification_redraw_tick):
-        fail("notification redraw timer still registered after unregister")
     if module._draw_header_button in header_callbacks():
         fail("header callback still registered after unregister")
     if module._header_button_registered:
         fail("header registration flag still set after unregister")
     if module._addon_registered:
         fail("addon registration flag still set after unregister")
+    if bpy.app.timers.is_registered(module._timer_tick):
+        fail("timer tick still registered after unregister")
+    if bpy.app.timers.is_registered(module._notification_redraw_tick):
+        fail("notification redraw timer still registered after unregister")
     if module._draw_handler is not None or module._draw_handler_pin is not None:
         fail("draw handlers not cleared after unregister")
 
-    print("[smoke_register:PASS] register/unregister lifecycle clean")
+
+def call(label: str, func) -> None:
+    try:
+        func()
+    except Exception as exc:
+        fail(f"{label} raised {type(exc).__name__}: {exc}")
+
+
+def main() -> None:
+    module = load_addon()
+    data_dir = Path(module.DATA_DIR)
+    expected_home = Path(os.environ["USERPROFILE"])
+    if expected_home not in data_dir.parents and data_dir != expected_home:
+        fail(f"DATA_DIR is outside temp home: {data_dir}")
+    data_file = Path(module.DATA_FILE)
+
+    call("initial unregister", module.unregister)
+    assert_unregistered(module)
+    if data_file.exists():
+        fail("initial unregister wrote achievements_data.json")
+
+    call("first register", module.register)
+    assert_registered_once(module)
+    draw_handles = (module._draw_handler, module._draw_handler_pin)
+
+    call("second register", module.register)
+    assert_registered_once(module)
+    assert_draw_handlers_unchanged(module, draw_handles)
+
+    call("first unregister", module.unregister)
+    assert_unregistered(module)
+
+    call("second unregister", module.unregister)
+    assert_unregistered(module)
+
+    print("[smoke_lifecycle_stress:PASS] repeated register/unregister lifecycle clean")
 
 
 if __name__ == "__main__":
