@@ -1,3 +1,5 @@
+import ast
+import json
 import os
 import re
 import subprocess
@@ -6,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+CATALOG_DIGEST = "db0e8d4bd5d596c9b0e54dac158a5c4742c33071a023914ee8287b01eea71e67"
 
 
 def run_script(*args, env=None):
@@ -36,6 +39,27 @@ def fake_blender(tmp_path):
     return path
 
 
+def top_level_assigned_names(path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names = set()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+    return names
+
+
+def imported_names_from_catalog(path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "achievements.catalog":
+            names.update(alias.name for alias in node.names)
+    return names
+
+
 def test_verify_frozen_passes_current_addon_contract():
     result = run_script("scripts/verify_frozen.py")
     assert_clean_verifier(result)
@@ -51,6 +75,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "extension draft exists: blender_manifest.toml" in result.stdout
     assert "package skeleton exists: achievements/__init__.py" in result.stdout
     assert "package metadata exists: achievements/metadata.py" in result.stdout
+    assert "catalog module exists: achievements/catalog.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -104,6 +129,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Introduce a modular `achievements/` package without changing runtime behavior.",
         "- [x] Keep `__init__.py` as the Blender entrypoint and delegate only when smoke tests prove parity.",
         "- [x] Add a draft `blender_manifest.toml` early so extension packaging constraints shape later work.",
+        "- [x] Extract all achievement and lesson definitions into schema-driven catalog modules.",
+        "- [x] Preserve IDs, Russian user-facing strings, categories, rewards, lesson links, and complex steps.",
+        "- [x] Add catalog validators for IDs, counts, references, reward types, stat keys, and complex step coverage.",
     ):
         assert phrase in plan_text
 
@@ -135,24 +163,26 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 3: Skeleton And Extension Draft",
-        "achievements/__init__.py",
-        "achievements/metadata.py",
-        "blender_manifest.toml",
-        "docs/agent/packaging-release.md",
+        "Iteration 4: Catalog Migration",
+        "achievements/catalog.py",
+        "__init__.py",
+        "achievements_v01 (4).py",
+        "README.md",
+        "docs/agent/frozen-application-contract.md",
         "scripts/verify_codex_plugin.py",
+        "scripts/verify_frozen.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Package import is safe in normal Python",
-        "No add-on runtime behavior was delegated to the new package",
-        "uv run pytest tests/test_infra_scripts.py::test_iteration_3_package_skeleton_and_manifest_are_safe_to_import tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract",
+        "catalog digest `db0e8d4bd5d596c9b0e54dac158a5c4742c33071a023914ee8287b01eea71e67`",
+        "Root add-on imports the catalog definitions",
+        "uv run pytest tests/test_infra_scripts.py::test_iteration_4_catalog_module_is_source_of_truth_and_safe_to_import tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract tests/test_infra_scripts.py::test_runtime_docs_alignment_matches_current_policy",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "Blender smoke suite `register` passed",
+        "Blender smoke suites `register`, `persistence`, and `rewards` passed",
         "Final `/review` fallback status: PASS",
-        "Continue `codex/iteration-3-skeleton-extension-draft` from Iteration 4",
+        "Continue `codex/iteration-4-catalog-migration` from Iteration 5",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
@@ -210,6 +240,105 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     assert not (resources / "BlenderAchievements").exists()
 
 
+def test_iteration_4_catalog_module_is_source_of_truth_and_safe_to_import(tmp_path):
+    catalog = ROOT / "achievements" / "catalog.py"
+    assert catalog.is_file(), "missing Iteration 4 catalog module"
+
+    text = catalog.read_text(encoding="utf-8")
+    assert "import bpy" not in text
+    assert "BlenderAchievements" not in text
+    assert "Path.home()" not in text
+
+    assigned = top_level_assigned_names(ROOT / "__init__.py")
+    assert "ACHIEVEMENTS_DEF" not in assigned
+    assert "LESSONS_DEF" not in assigned
+
+    imported = imported_names_from_catalog(ROOT / "__init__.py")
+    for name in (
+        "ACHIEVEMENTS_DEF",
+        "LESSONS_DEF",
+        "ACH_CATEGORIES",
+        "LESSON_CATEGORIES",
+        "REWARD_CATEGORIES",
+    ):
+        assert name in imported
+
+    home = tmp_path / "home"
+    userprofile = tmp_path / "profile"
+    resources = tmp_path / "resources"
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "USERPROFILE": str(userprofile),
+        "BLENDER_USER_RESOURCES": str(resources),
+        "PYTHONPATH": str(ROOT),
+    }
+    result = run_script(
+        "-c",
+        (
+            "import json; "
+            "from achievements import catalog; "
+            "print(json.dumps({"
+            "'errors': catalog.validate_catalog(), "
+            "'counts': catalog.catalog_counts(), "
+            "'digest': catalog.catalog_digest(), "
+            "}, ensure_ascii=False, sort_keys=True))"
+        ),
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["errors"] == []
+    assert payload["digest"] == CATALOG_DIGEST
+    assert payload["counts"] == {
+        "achievement_categories": {
+            "EDITING": 45,
+            "GEO_NODES": 14,
+            "MATERIALS": 17,
+            "RENDERING": 17,
+            "TIME": 12,
+        },
+        "achievement_count": 105,
+        "check_types": {"complex": 65, "stat": 40},
+        "complex_step_range": [1, 4],
+        "complex_step_total": 85,
+        "difficulty_counts": {"easy": 10, "hard": 55, "medium": 40},
+        "first_achievement_id": "first_vertex",
+        "first_lesson_id": "lesson_vertices_basics",
+        "last_achievement_id": "geonode_domain_switch",
+        "last_lesson_id": "lesson_render_basics",
+        "lesson_categories": {
+            "EDITING": 5,
+            "GEO_NODES": 1,
+            "MATERIALS": 1,
+            "RENDERING": 1,
+            "TIME": 1,
+        },
+        "lesson_count": 9,
+        "reward_categories": {"GEO_NODES": 18, "MESHES": 38, "SHADERS": 49},
+        "reward_types": {
+            "geo_nodes": 5,
+            "material": 11,
+            "mesh": 5,
+            "none": 82,
+            "tutorial": 2,
+        },
+        "stat_keys": {
+            "edges_created": 3,
+            "faces_created": 6,
+            "materials_applied": 5,
+            "meshes_1000plus": 4,
+            "renders_completed": 6,
+            "time_spent": 6,
+            "vertices_created": 7,
+            "vertices_deleted": 3,
+        },
+    }
+    assert not (home / "BlenderAchievements").exists()
+    assert not (userprofile / "BlenderAchievements").exists()
+    assert not (resources / "BlenderAchievements").exists()
+
+
 def test_runtime_docs_alignment_matches_current_policy():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "Blender 5.0+" in readme
@@ -220,6 +349,8 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "Blender 4.5 / 5.0 / 5.1" not in readme
     assert "blender_achievements_addon_v01.zip" not in readme
     assert "blender_achievements.py" not in readme
+    assert "achievements/catalog.py" in readme
+    assert "Одиночный .py" not in readme
     assert "Ожидаемые пользовательские ассеты" in readme
 
     find_blender = (ROOT / "scripts" / "find_blender.py").read_text(encoding="utf-8")
@@ -239,6 +370,12 @@ def test_runtime_docs_alignment_matches_current_policy():
         text = path.read_text(encoding="utf-8")
         assert "permanent byte-identical duplicate" in text, path
         assert "removed or archived" not in text, path
+    for path in (
+        ROOT / "docs" / "agent" / "architecture.md",
+        ROOT / "docs" / "agent" / "frozen-application-contract.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "achievements/catalog.py" in text, path
 
     stale_catalog_reference = (ROOT / "achievements_100_list.md").read_text(encoding="utf-8")
     assert "stale reference" in stale_catalog_reference

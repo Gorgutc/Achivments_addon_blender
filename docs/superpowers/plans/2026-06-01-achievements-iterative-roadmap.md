@@ -82,9 +82,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 4: Catalog Migration
 
-- [ ] Extract all achievement and lesson definitions into schema-driven catalog modules.
-- [ ] Preserve IDs, Russian user-facing strings, categories, rewards, lesson links, and complex steps.
-- [ ] Add catalog validators for IDs, counts, references, reward types, stat keys, and complex step coverage.
+- [x] Extract all achievement and lesson definitions into schema-driven catalog modules.
+- [x] Preserve IDs, Russian user-facing strings, categories, rewards, lesson links, and complex steps.
+- [x] Add catalog validators for IDs, counts, references, reward types, stat keys, and complex step coverage.
 
 **Acceptance:** Verifiers still confirm 105 achievements, 9 lessons, unique IDs, category counts, difficulty counts, and reward counts.
 
