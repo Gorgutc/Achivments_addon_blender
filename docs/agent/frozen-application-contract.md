@@ -117,6 +117,7 @@ Internal session fields track active time, idle gaps, mesh/material snapshots, d
 Global layout:
 - Main entry is a 3D Viewport header button: `Achievements (unlocked/total)`.
 - Popup width is derived from `GRID_COLS * _CARD_W * _UNIT + 80`.
+- Popup width, tab specs, pagination plans, Scene property specs, overlay frame geometry, storage filters, and reward labels are planned by pure `achievements/ui.py`; root `__init__.py` remains the Blender layout/GPU adapter.
 - Grid is 2 columns by 5 rows, 10 cards per page.
 - Cards are horizontal: icon on the left, text and actions on the right.
 - Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
@@ -242,6 +243,7 @@ Operators:
 - `ACH_OT_AchievementsDialog`
 
 UI helpers:
+- `achievements/ui.py`
 - `_tab_prop`
 - `_draw_unified_card`
 - `_draw_grid_page`
@@ -281,3 +283,4 @@ Before editing add-on behavior:
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, unlock-hash migration, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
 - Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
+- Blender `ui_visual` smoke freezes UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

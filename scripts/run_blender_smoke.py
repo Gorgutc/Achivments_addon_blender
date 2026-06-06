@@ -16,6 +16,7 @@ SUITES = {
     "persistence": ROOT / "tests" / "blender" / "smoke_persistence.py",
     "register": ROOT / "tests" / "blender" / "smoke_register.py",
     "rewards": ROOT / "tests" / "blender" / "smoke_rewards.py",
+    "ui_visual": ROOT / "tests" / "blender" / "smoke_ui_visual.py",
 }
 
 
@@ -30,6 +31,7 @@ def smoke_env(temp_home: Path) -> dict[str, str]:
     env["USERPROFILE"] = str(temp_home)
     env["BLENDER_USER_RESOURCES"] = str(temp_home / "blender-user-resources")
     env["ACHIEVEMENTS_ADDON_ROOT"] = str(ROOT)
+    env["ACHIEVEMENTS_VISUAL_QA_DIR"] = str(Path(tempfile.gettempdir()) / "achievements-ui-visual-qa")
     return env
 
 
@@ -50,6 +52,7 @@ def main() -> int:
         print(f"HOME={env['HOME']}")
         print(f"USERPROFILE={env['USERPROFILE']}")
         print(f"BLENDER_USER_RESOURCES={env['BLENDER_USER_RESOURCES']}")
+        print(f"ACHIEVEMENTS_VISUAL_QA_DIR={env['ACHIEVEMENTS_VISUAL_QA_DIR']}")
         return 0
 
     with tempfile.TemporaryDirectory(prefix="achievements-blender-smoke-") as temp_dir:

@@ -7,6 +7,7 @@
 
 Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint.
 Reward manifest/access/fallback planning is isolated in `achievements/rewards.py`; Blender asset linking remains in the runtime operator.
+UI tab, pagination, scene-property, popup-width, overlay-geometry, and storage-filter contracts are isolated in `achievements/ui.py`; Blender layout and GPU drawing remain in the runtime adapter.
 
 ---
 
@@ -66,6 +67,7 @@ uv run python scripts/run_blender_smoke.py --suite lifecycle_stress
 uv run python scripts/run_blender_smoke.py --suite persistence
 uv run python scripts/run_blender_smoke.py --suite engine
 uv run python scripts/run_blender_smoke.py --suite rewards
+uv run python scripts/run_blender_smoke.py --suite ui_visual
 ```
 
 ---
