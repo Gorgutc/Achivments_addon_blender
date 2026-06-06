@@ -5,6 +5,8 @@
 105 достижений, 9 уроков, XP-система с 10 уровнями, награды.
 Каталог достижений и уроков теперь находится в `achievements/catalog.py`; корневой `__init__.py` остаётся Blender runtime entrypoint и импортирует legacy-имена каталога для совместимости.
 
+Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint.
+
 ---
 
 ## Установка
@@ -61,6 +63,7 @@ Blender smoke запускается только через временные 
 uv run python scripts/run_blender_smoke.py --suite register
 uv run python scripts/run_blender_smoke.py --suite lifecycle_stress
 uv run python scripts/run_blender_smoke.py --suite persistence
+uv run python scripts/run_blender_smoke.py --suite engine
 uv run python scripts/run_blender_smoke.py --suite rewards
 ```
 

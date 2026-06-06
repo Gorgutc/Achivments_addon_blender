@@ -8,6 +8,7 @@ Authoritative commands:
 - `uv run python scripts/find_blender.py`
 - `uv run python scripts/run_blender_smoke.py --suite register`
 - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress`
+- `uv run python scripts/run_blender_smoke.py --suite engine`
 - `uv run ruff check .`
 - `uv run pytest`
 
