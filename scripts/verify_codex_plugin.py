@@ -67,6 +67,7 @@ REQUIRED_INFRA_FILES = [
     "achievements/events.py",
     "achievements/lifecycle.py",
     "achievements/metadata.py",
+    "achievements/persistence.py",
     "blender_manifest.toml",
     "pyproject.toml",
     "scripts/find_blender.py",
@@ -75,6 +76,7 @@ REQUIRED_INFRA_FILES = [
     "scripts/verify_frozen.py",
     "tests/test_infra_scripts.py",
     "tests/test_events.py",
+    "tests/test_persistence.py",
     "tests/blender/smoke_lifecycle_stress.py",
     "tests/blender/smoke_register.py",
     "tests/blender/smoke_persistence.py",
@@ -207,12 +209,14 @@ def verify_extension_draft() -> None:
     catalog = ROOT / "achievements" / "catalog.py"
     events = ROOT / "achievements" / "events.py"
     lifecycle = ROOT / "achievements" / "lifecycle.py"
+    persistence = ROOT / "achievements" / "persistence.py"
     package_metadata = ROOT / "achievements" / "metadata.py"
     record("extension draft exists: blender_manifest.toml", manifest.is_file())
     record("package skeleton exists: achievements/__init__.py", package_init.is_file())
     record("catalog module exists: achievements/catalog.py", catalog.is_file())
     record("event helpers exist: achievements/events.py", events.is_file())
     record("lifecycle helpers exist: achievements/lifecycle.py", lifecycle.is_file())
+    record("persistence helpers exist: achievements/persistence.py", persistence.is_file())
     record("package metadata exists: achievements/metadata.py", package_metadata.is_file())
 
 

@@ -98,9 +98,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 6: Persistence Hardening
 
-- [ ] Add `schema_version`, state model, and idempotent migrations.
-- [ ] Replace direct JSON writes with same-directory temp-file writes, flush/fsync, `os.replace`, and backup handling.
-- [ ] Add corrupt JSON quarantine/recovery behavior and fixtures for current schema migration.
+- [x] Add `schema_version`, state model, and idempotent migrations.
+- [x] Replace direct JSON writes with same-directory temp-file writes, flush/fsync, `os.replace`, and backup handling.
+- [x] Add corrupt JSON quarantine/recovery behavior and fixtures for current schema migration.
 
 **Acceptance:** Persistence smoke passes under a temporary profile; corrupt JSON tests pass; real user data remains untouched.
 

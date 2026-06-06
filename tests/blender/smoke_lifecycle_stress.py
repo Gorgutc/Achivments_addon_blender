@@ -135,6 +135,8 @@ def main() -> None:
     expected_home = Path(os.environ["USERPROFILE"])
     if expected_home not in data_dir.parents and data_dir != expected_home:
         fail(f"DATA_DIR is outside temp home: {data_dir}")
+    if data_dir.exists():
+        fail("root import created DATA_DIR before register")
     data_file = Path(module.DATA_FILE)
 
     call("initial unregister", module.unregister)

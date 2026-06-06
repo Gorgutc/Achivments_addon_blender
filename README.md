@@ -40,6 +40,7 @@
 
 > Данные переживают переустановку Blender.
 > Удаляются только при ручном удалении папки `~/BlenderAchievements/`.
+> `achievements_data.json` хранится в текущей schema `1.0.0`; старый JSON мигрируется автоматически, а поврежденный JSON переносится рядом как `achievements_data.json.corrupt*`.
 
 ---
 
@@ -77,6 +78,7 @@ uv run python scripts/run_blender_smoke.py --suite rewards
 | `achievements/catalog.py` | Категории, `ACHIEVEMENTS_DEF`, `LESSONS_DEF`, валидаторы каталога | Добавить/переименовать категории, достижения, уроки |
 | `achievements/events.py` | Active-time, session, scene snapshot helpers | Править учет активности без импорта `bpy` |
 | `achievements/lifecycle.py` | Idempotent registration helpers | Править hot-reload lifecycle без прямого изменения handler/timer wiring |
+| `achievements/persistence.py` | Schema migration, atomic JSON writes, corrupt recovery | Править сохранение прогресса без импорта `bpy` |
 | **139–143**   | `DIFFICULTY_XP`                               | Очки XP за сложность                  |
 | **156–167**   | `LEVEL_TITLES`                                | Звания уровней                        |
 | **190–196**   | `_difficulty_label()`                         | Метки сложности на карточках           |

@@ -9,7 +9,6 @@ bl_info = {
 }
 
 import bpy
-import json
 import os
 import sys
 import time
@@ -45,12 +44,9 @@ from gpu_extras.batch import batch_for_shader
 # Data persists in user's home directory — survives Blender reinstalls.
 # Only lost if the directory itself is manually deleted.
 DATA_DIR = os.path.join(os.path.expanduser("~"), "BlenderAchievements")
-os.makedirs(DATA_DIR, exist_ok=True)
 DATA_FILE = os.path.join(DATA_DIR, "achievements_data.json")
 ICONS_DIR = os.path.join(DATA_DIR, "textures")
-os.makedirs(ICONS_DIR, exist_ok=True)
 REWARDS_DIR = os.path.join(DATA_DIR, "rewards")
-os.makedirs(REWARDS_DIR, exist_ok=True)
 
 
 # =============================================
@@ -122,6 +118,7 @@ from achievements.catalog import (
 )
 from achievements import events as ach_events
 from achievements import lifecycle as ach_lifecycle
+from achievements import persistence as ach_persistence
 
 
 
@@ -248,29 +245,16 @@ def _flush_session_time():
     ach_events.flush_session_time(stats, now=time.time(), idle_timeout=_IDLE_TIMEOUT)
 
 
+def _ensure_data_dirs():
+    ach_persistence.ensure_data_dirs(DATA_DIR)
+
+
 def save_data():
     """Persist all stats, unlocks, and rewards to JSON file."""
     _flush_session_time()
-    data = {
-        "stats": {
-            "vertices_created":  stats.vertices_created,
-            "vertices_deleted":  stats.vertices_deleted,
-            "edges_created":     stats.edges_created,
-            "faces_created":     stats.faces_created,
-            "meshes_1000plus":   stats.meshes_1000plus,
-            "materials_applied": stats.materials_applied,
-            "time_spent":        stats.time_spent,
-            "renders_completed": stats.renders_completed,
-        },
-        "unlocked": list(stats.unlocked),
-        "unlock_hashes": stats.unlock_hashes,
-        "rewards_claimed": list(stats.rewards_claimed),
-        "pinned_ach_id": stats.pinned_ach_id,
-        "daily_sessions": stats.daily_sessions,
-    }
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        _ensure_data_dirs()
+        ach_persistence.atomic_write_json(DATA_FILE, ach_persistence.payload_from_stats(stats))
     except Exception as e:
         print(f"[Achievements] Save error: {e}")
 
@@ -281,32 +265,14 @@ def load_data():
         print("[Achievements] Data file not found — new profile")
         return
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        s = data.get("stats", {})
-        stats.vertices_created  = s.get("vertices_created", 0)
-        stats.vertices_deleted  = s.get("vertices_deleted", 0)
-        stats.edges_created     = s.get("edges_created", 0)
-        stats.faces_created     = s.get("faces_created", 0)
-        stats.meshes_1000plus   = s.get("meshes_1000plus", 0)
-        stats.materials_applied = s.get("materials_applied", 0)
-        stats.time_spent        = s.get("time_spent", 0)
-        stats.renders_completed = s.get("renders_completed", 0)
-        stats.unlocked = set(data.get("unlocked", []))
-        stats.unlock_hashes = data.get("unlock_hashes", {})
-        stats.rewards_claimed = set(data.get("rewards_claimed", []))
-        stats.pinned_ach_id = data.get("pinned_ach_id", "")
-        stats.daily_sessions = data.get("daily_sessions", [])
-
-        # Migration: generate missing hashes for achievements unlocked
-        # before the hash-protection system was added.
-        _migrated = 0
-        for _aid in stats.unlocked:
-            if _aid not in stats.unlock_hashes:
-                stats.unlock_hashes[_aid] = _make_unlock_hash(_aid)
-                _migrated += 1
-        if _migrated:
-            print(f"[Achievements] Migrated {_migrated} unlock hashes")
+        payload, load_report = ach_persistence.load_payload(
+            DATA_FILE, make_unlock_hash=_make_unlock_hash)
+        apply_report = ach_persistence.apply_payload_to_stats(
+            stats, payload, make_unlock_hash=_make_unlock_hash)
+        if load_report.recovered_corrupt:
+            print(f"[Achievements] Recovered corrupt data: {load_report.corrupt_path}")
+        if load_report.migrated or apply_report.migrated:
+            print("[Achievements] Migrated persistence schema")
             save_data()
 
         print(f"[Achievements] Loaded. Achievements: {len(stats.unlocked)}")
@@ -2187,6 +2153,7 @@ def register():
     ach_lifecycle.register_classes(bpy, _classes)
     _register_scene_properties()
 
+    _ensure_data_dirs()
     load_data()
     now = time.time()
     ach_events.reset_session_tracking(stats, now=now)

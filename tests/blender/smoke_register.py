@@ -74,6 +74,8 @@ def main() -> None:
     expected_home = Path(os.environ["USERPROFILE"])
     if expected_home not in data_dir.parents and data_dir != expected_home:
         fail(f"DATA_DIR is outside temp home: {data_dir}")
+    if data_dir.exists():
+        fail("root import created DATA_DIR before register")
 
     module.register()
     missing_props = [prop for prop in scene_props(module) if not hasattr(bpy.types.Scene, prop)]

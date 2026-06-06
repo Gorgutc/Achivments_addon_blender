@@ -29,5 +29,5 @@ Blender smoke rules:
 - Use background mode and factory startup.
 - Verify register/unregister lifecycle and cleanup.
 - Verify repeated register/unregister stress cleanup and hot-reload idempotency.
-- Verify persistence schema and hash migration under a temporary profile.
+- Verify persistence schema, current `schema_version`, atomic save, hash migration, and corrupt JSON quarantine/recovery under a temporary profile.
 - Verify material, mesh, and geo node reward fallbacks under a temporary profile.
