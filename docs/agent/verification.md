@@ -26,8 +26,16 @@ GitHub Actions Blender smoke:
 - `.github/workflows/blender-smoke.yml` runs on pull requests, pushes to `main`, and manual `workflow_dispatch`.
 - `blender-5-1-stable` downloads Blender 5.1.2 from the official Blender 5.1 release path and is blocking.
 - `blender-5-2-alpha-canary` reads the download URL from repository variable `BLENDER_5_2_ALPHA_URL` and is non-blocking through `continue-on-error`.
+- If `BLENDER_5_2_ALPHA_URL` is empty, the optional canary skips its smoke steps without failing the workflow; this means no Blender 5.2 coverage was produced for that run.
 - Both matrix targets run the same smoke suites: `register`, `lifecycle_stress`, `persistence`, `engine`, `rewards`, and `ui_visual`.
 - Blender smoke jobs set `BLENDER_BIN`; the smoke runner still creates temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` for each suite.
+
+Release packaging gate:
+- `uv run python scripts/build_extension.py --output-dir reports/extension --server-generate`
+- `blender --background --command extension validate reports/extension/source`
+- `blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension`
+- `blender --background --command extension server-generate --repo-dir reports/extension --html`
+- The release package excludes docs/tests/plugins/scripts, workflow files, generated reports, and `achievements_v01 (4).py`; inspect `reports/extension/achievements-0.1.0.zip` before shipping.
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.

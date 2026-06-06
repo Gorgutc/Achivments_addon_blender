@@ -78,12 +78,14 @@ REQUIRED_INFRA_FILES = [
     "achievements/ui.py",
     "blender_manifest.toml",
     "pyproject.toml",
+    "scripts/build_extension.py",
     "scripts/find_blender.py",
     "scripts/run_blender_smoke.py",
     "scripts/verify_codex_plugin.py",
     "scripts/verify_frozen.py",
     "tests/test_catalog.py",
     "tests/test_infra_scripts.py",
+    "tests/test_release_packaging.py",
     "tests/test_engine.py",
     "tests/test_events.py",
     "tests/test_persistence.py",
@@ -223,6 +225,7 @@ def verify_docs() -> None:
 
 def verify_extension_draft() -> None:
     manifest = ROOT / "blender_manifest.toml"
+    release_builder = ROOT / "scripts" / "build_extension.py"
     package_init = ROOT / "achievements" / "__init__.py"
     catalog = ROOT / "achievements" / "catalog.py"
     engine = ROOT / "achievements" / "engine.py"
@@ -234,6 +237,7 @@ def verify_extension_draft() -> None:
     ui = ROOT / "achievements" / "ui.py"
     package_metadata = ROOT / "achievements" / "metadata.py"
     record("extension draft exists: blender_manifest.toml", manifest.is_file())
+    record("release builder exists: scripts/build_extension.py", release_builder.is_file())
     record("package skeleton exists: achievements/__init__.py", package_init.is_file())
     record("catalog module exists: achievements/catalog.py", catalog.is_file())
     record("engine helpers exist: achievements/engine.py", engine.is_file())

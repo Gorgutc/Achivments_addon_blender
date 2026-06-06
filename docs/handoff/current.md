@@ -2,103 +2,88 @@
 
 ## Goal
 
-Iteration 11: QA And CI.
+Iteration 12: Release.
 
-Add repository CI gates that mirror the local QA contract, expand fast unit coverage for catalog, persistence, engine, rewards, and sync stub, and document the Python 3.13 CI alignment while keeping Blender runtime behavior unchanged.
+Finalize the Blender extension release path, fix the optional Blender 5.2 alpha canary workflow behavior when `BLENDER_5_2_ALPHA_URL` is unset, and document the release packaging gate without changing add-on runtime behavior.
 
 ## Changed Files
 
-- `.github/workflows/fast-gate.yml`
 - `.github/workflows/blender-smoke.yml`
 - `README.md`
+- `docs/agent/packaging-release.md`
 - `docs/agent/quality-tooling.md`
 - `docs/agent/verification.md`
 - `docs/handoff/current.md`
 - `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`
+- `scripts/build_extension.py`
 - `scripts/verify_codex_plugin.py`
-- `tests/test_catalog.py`
-- `tests/test_engine.py`
 - `tests/test_infra_scripts.py`
-- `tests/test_persistence.py`
-- `tests/test_rewards.py`
-- `tests/test_sync.py`
+- `tests/test_release_packaging.py`
 
 ## Done
 
-- Added `.github/workflows/fast-gate.yml` for the blocking fast gate on pull requests, pushes to `main`, and manual dispatch.
-- The fast gate runs `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
-- Added `.github/workflows/blender-smoke.yml` for Blender smoke CI on pull requests, pushes to `main`, and manual dispatch.
-- The Blender smoke workflow runs Blender 5.1 stable as the blocking target and Blender 5.2 alpha canary as a non-blocking target through `continue-on-error`.
-- The canary download URL is intentionally read from repository variable `BLENDER_5_2_ALPHA_URL`.
-- Both Blender smoke matrix targets run `register`, `lifecycle_stress`, `persistence`, `engine`, `rewards`, and `ui_visual`.
-- Expanded catalog unit coverage in `tests/test_catalog.py` for safe import, frozen digest/counts, lesson links, reward payloads, and complex step structure.
-- Expanded persistence coverage for invalid payload sanitization, stat coercion, duplicate cleanup, pinned-state type safety, and missing unlock hash generation.
-- Expanded engine coverage for ratio/progress-bar clamping and empty complex achievements.
-- Expanded rewards coverage for tutorial URL validation and ignored unsupported reward types.
-- Expanded sync stub coverage for recursive immutable payload snapshots and deterministic set ordering.
-- Updated `scripts/verify_codex_plugin.py` so the workflows and catalog unit test stay tracked infrastructure.
-- Updated README, verification docs, quality-tooling docs, roadmap, infra tests, and handoff for Iteration 11.
+- Investigated the failed GitHub Actions check `Achievements Blender Smoke / blender-5-2-alpha-canary`.
+- Root cause: the optional canary job received an empty `BLENDER_5_2_ALPHA_URL`, so the workflow failed while trying to install Blender 5.2 alpha.
+- Added `id: install-blender` and `skip_smoke` output handling to `.github/workflows/blender-smoke.yml`.
+- The canary now emits `Skipping optional Blender 5.2 alpha canary` and skips smoke steps when `BLENDER_5_2_ALPHA_URL` is empty; the stable Blender 5.1 row still fails if its URL is missing.
+- Added release packaging helper `scripts/build_extension.py`.
+- Prepared a lean release source tree under `reports/extension/source` with only `blender_manifest.toml`, root `__init__.py`, and `achievements/`.
+- The release package excludes repository docs, tests, scripts, plugins, GitHub workflow files, and `achievements_v01 (4).py`.
+- Verified the generated ZIP path `reports/extension/achievements-0.1.0.zip` and static repository generation result `found 1 packages`.
+- Updated README, verification docs, quality-tooling docs, packaging-release docs, roadmap, infra verifier, and tests for Iteration 12.
 - Left `__init__.py` and `achievements_v01 (4).py` untouched, so the duplicate contract remains unchanged.
-- Kept normal unit tests free of `bpy`; Blender-only coverage remains in smoke suites routed through `scripts/run_blender_smoke.py`.
+- Did not touch real `~/BlenderAchievements` data.
 
 ## Remaining
 
-- Start Iteration 12: Release.
-- Finalize extension manifest metadata and release documentation.
-- Add Blender extension validate/build commands and decide the release asset/license policy before bundling any reward assets.
-- Configure repository variable `BLENDER_5_2_ALPHA_URL` if the non-blocking canary job should actually download and smoke Blender 5.2 alpha in GitHub Actions.
-- Do not add the Blender 5.2 alpha canary job to required branch protection unless the user explicitly promotes Blender 5.2 to a blocking release target.
+- Configure repository variable `BLENDER_5_2_ALPHA_URL` if real Blender 5.2 alpha coverage is required in GitHub Actions.
+- Keep Blender 5.2 alpha non-blocking unless a future explicit release decision promotes it to a blocking target.
+- Asset/license policy remains open: no reward `.blend` assets are bundled until licenses are explicitly approved.
+- Future release work can decide whether to update known `bl_info` policy drift; this iteration keeps runtime source unchanged.
 
 ## Verification
 
-- Baseline before Iteration 11 changes:
+- Targeted checks:
+  - `uv run pytest tests\test_release_packaging.py` passed: `7 passed`.
+  - `uv run ruff check scripts\build_extension.py tests\test_release_packaging.py` passed.
+  - `uv run python scripts/build_extension.py --output-dir reports\extension --server-generate` prepared `12 release files` and printed shell-safe Blender commands.
+  - `blender --background --command extension validate reports\extension\source` passed.
+  - `& 'C:\Program Files\Blender Foundation\Blender 5.1\blender.exe' '--background' '--command' 'extension' 'validate' 'reports\extension\source'` passed.
+  - `blender --background --command extension build --source-dir reports\extension\source --output-dir reports\extension` passed and produced `reports/extension/achievements-0.1.0.zip`.
+  - `blender --background --command extension server-generate --repo-dir reports\extension --html` passed with `found 1 packages`.
+  - `tar -tf reports\extension\achievements-0.1.0.zip` confirmed the ZIP contains only `blender_manifest.toml`, root `__init__.py`, and `achievements/`.
+- Final fast gate:
   - `uv run python scripts/verify_frozen.py` passed: `35/35 PASS`.
-  - `uv run python scripts/verify_codex_plugin.py` passed: `91/91 PASS`.
+  - `uv run python scripts/verify_codex_plugin.py` passed: `94/94 PASS`.
   - `uv run ruff check .` passed.
-  - `uv run pytest` passed: `44 passed`.
-- RED checks:
-  - `uv run pytest tests/test_infra_scripts.py::test_iteration_11_github_actions_workflows_are_present_and_match_contract` failed before workflows existed because `.github/workflows/fast-gate.yml` was missing.
-  - `uv run pytest tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract` failed before verifier coverage was updated because workflow records were missing from verifier output.
-  - `uv run pytest tests/test_catalog.py` initially failed because the new catalog test expected non-existent `catalog.COMPLEX_STEP_CHECKS`; the test was corrected to assert real catalog contracts instead.
-- Targeted GREEN checks:
-  - `uv run pytest tests/test_infra_scripts.py::test_iteration_11_github_actions_workflows_are_present_and_match_contract` passed.
-  - `uv run pytest tests/test_infra_scripts.py::test_verify_codex_plugin_passes_current_infra_contract` passed after staging verifier-covered files.
-  - `uv run pytest tests/test_catalog.py` passed: `4 passed`.
-  - `uv run pytest tests/test_persistence.py` passed: `7 passed`.
-  - `uv run pytest tests/test_engine.py` passed: `7 passed`.
-  - `uv run pytest tests/test_rewards.py` passed: `6 passed`.
-  - `uv run pytest tests/test_sync.py` passed: `9 passed`.
-- Final gate:
-  - `uv run python scripts/verify_frozen.py` passed.
-  - `uv run python scripts/verify_codex_plugin.py` passed.
-  - `uv run ruff check .` passed.
-  - `uv run pytest` passed: `54 passed`.
-  - `uv run python scripts/find_blender.py` found Blender 5.1.2.
-  - `uv run python scripts/run_blender_smoke.py --suite register` passed on Blender 5.1.2 with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
-  - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress` passed on Blender 5.1.2.
-  - `uv run python scripts/run_blender_smoke.py --suite persistence` passed on Blender 5.1.2.
-  - `uv run python scripts/run_blender_smoke.py --suite engine` passed on Blender 5.1.2.
-  - `uv run python scripts/run_blender_smoke.py --suite rewards` passed on Blender 5.1.2.
-  - `uv run python scripts/run_blender_smoke.py --suite ui_visual` passed on Blender 5.1.2 and saved `ui_visual_contract.png` under the temporary visual QA artifact directory.
+  - `uv run pytest` passed: `61 passed`.
+- Final Blender smoke gate on Blender 5.1.2 with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`:
+  - `uv run python scripts/run_blender_smoke.py --suite register` passed.
+  - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress` passed.
+  - `uv run python scripts/run_blender_smoke.py --suite persistence` passed.
+  - `uv run python scripts/run_blender_smoke.py --suite engine` passed.
+  - `uv run python scripts/run_blender_smoke.py --suite rewards` passed.
+  - `uv run python scripts/run_blender_smoke.py --suite ui_visual` passed and saved `ui_visual_contract.png` under the temporary visual QA artifact directory.
+  - `git diff --cached --check` passed.
 
 ## Agents And Review
 
-- `quality_tooling_architect` audited the CI/tooling direction and recommended blocking fast gate plus blocking Blender 5.1 stable smoke with a non-blocking Blender 5.2 canary.
-- `blender_api_compat_guardian` audited the Blender smoke CI shape, confirmed `scripts/run_blender_smoke.py` keeps temp profile isolation, and flagged two in-progress blockers: the stale `COMPLEX_STEP_CHECKS` test assumption and untracked `tests/test_catalog.py`. Both were resolved before final verification.
-- Final review agents checked the staged Iteration 11 diff for CI correctness, instruction drift, and verification coverage.
-- Final `/review` fallback status: PASS. Requirements match Iteration 11, CI command names mirror local gates, Blender 5.1 stable is blocking, Blender 5.2 alpha is canary-only, root Blender runtime is unchanged, duplicate contract is unchanged, and residual risks are listed below.
+- `quality_tooling_architect` sidecar audited the canary failure and recommended canary-only skip behavior for missing `BLENDER_5_2_ALPHA_URL`.
+- First read-only review sidecar found four issues: unbounded `shutil.rmtree`, unsafe printed command quoting, handoff pending text, and staged whitespace. All four were fixed.
+- Final read-only verification sidecar found the remaining handoff-only inconsistency (`5 passed` and pending review/gate text). This handoff now records the actual final results.
+- Final `/review` fallback status: PASS. The staged diff matches Iteration 12 scope, canary skip behavior is documented and tested, release packaging uses a bounded generated directory and shell-safe printed commands, runtime source and duplicate are unchanged, generated ZIP contents are lean, and residual risks are listed below.
 
 ## Blockers
 
-None.
+None for the release tooling PR.
 
 ## Residual Risks
 
-- GitHub Actions canary smoke requires repository variable `BLENDER_5_2_ALPHA_URL`; without it the canary job intentionally fails non-blocking and does not provide real Blender 5.2 coverage.
-- CI uses Python 3.13 while `pyproject.toml` still allows local Python 3.11+; this is intentional tooling alignment, not a local compatibility-floor change.
-- Blender 5.2 alpha remains a canary and should not be made branch-protection required until a future explicit release decision.
-- Release packaging, extension validation/build commands, static extension repository output, and bundled reward asset licensing are still Iteration 12 work.
+- Empty `BLENDER_5_2_ALPHA_URL` now skips the optional canary without failing, but that run provides no Blender 5.2 alpha coverage.
+- The generated extension ZIP intentionally omits reward `.blend` assets until asset licenses are explicitly approved.
+- `reports/` remains generated local output and is ignored by git.
+- Known add-on metadata drift in runtime `bl_info` is not changed in this iteration because runtime source and duplicate were intentionally left untouched.
 
 ## Next Start Prompt
 
-Continue from Iteration 12: Release. Read `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`, `docs/handoff/current.md`, `docs/agent/packaging-release.md`, `docs/agent/frozen-application-contract.md`, and `docs/agent/verification.md`. Do not touch real `~/BlenderAchievements` data. Finalize extension packaging metadata and release docs, add Blender extension validate/build commands, preserve the byte-identical duplicate contract, keep README updated, and decide bundled asset/license policy before packaging any reward assets.
+Continue after Iteration 12 merge. Read `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`, `docs/handoff/current.md`, `docs/agent/packaging-release.md`, `docs/agent/frozen-application-contract.md`, and `docs/agent/verification.md`. Do not touch real `~/BlenderAchievements` data. Start the next user-approved release or post-release task, preserve the byte-identical duplicate contract, keep README updated, and decide bundled reward asset/license policy before packaging any reward assets.

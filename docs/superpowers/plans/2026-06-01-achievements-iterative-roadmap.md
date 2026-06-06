@@ -147,9 +147,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 12: Release
 
-- [ ] Finalize extension manifest metadata and release documentation.
-- [ ] Add validate/build commands for Blender extension packaging.
-- [ ] Add optional static extension repository generation only after release packaging is stable.
+- [x] Finalize extension manifest metadata and release documentation.
+- [x] Add validate/build commands for Blender extension packaging.
+- [x] Add optional static extension repository generation only after release packaging is stable.
 
 **Acceptance:** Extension validate/build commands pass, full fast and Blender gates pass, `/review` or fallback is recorded, and handoff is complete.
 
