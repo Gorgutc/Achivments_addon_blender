@@ -81,6 +81,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
     assert "persistence helpers exist: achievements/persistence.py" in result.stdout
     assert "rewards helpers exist: achievements/rewards.py" in result.stdout
+    assert "sync helpers exist: achievements/sync.py" in result.stdout
     assert "ui helpers exist: achievements/ui.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
@@ -206,6 +207,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Split Scene properties, operators, popup tabs/cards, notifications, and pinned overlay into UI modules.",
         "- [x] Preserve tabs: `Задания`, `Выполнено`, `Уроки`, `Хранилище`.",
         "- [x] Run screenshot-based visual QA for header button, popup layout, pinned overlay, notifications, and long text.",
+        "- [x] Add sync models, disabled backend interface, queue, and deterministic conflict policy.",
+        "- [x] Keep networking disabled by default.",
+        "- [x] Exclude pinned UI state from sync unless a future task explicitly changes that.",
     ):
         assert phrase in plan_text
 
@@ -237,33 +241,28 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 9: UI Split And Visual QA",
-        "achievements/ui.py",
-        "tests/test_ui.py",
-        "__init__.py",
-        "achievements_v01 (4).py",
+        "Iteration 10: Cloud Stub",
+        "achievements/sync.py",
+        "tests/test_sync.py",
         "README.md",
+        "docs/agent/architecture.md",
         "docs/agent/frozen-application-contract.md",
         "docs/agent/verification.md",
         "scripts/verify_codex_plugin.py",
-        "scripts/verify_frozen.py",
-        "scripts/run_blender_smoke.py",
-        "tests/blender/smoke_ui_visual.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `achievements/ui.py`",
-        "`TabSpec`, `ScenePropertySpec`, `GridPagePlan`, and `OverlayFrame`",
-        "UI tab specs, Scene property specs, pagination plans, popup dialog width",
-        "Preserved tabs `Задания / Выполнено / Уроки / Хранилище`",
-        "long RU/EN text budgets",
+        "Added `achievements/sync.py`",
+        "`SyncChange`, `SyncQueue`, `ConflictDecision`, `SyncBackendResult`, and `DisabledSyncBackend`",
+        "networking disabled by default",
+        "Pinned UI state `pinned_ach_id` is excluded",
+        "normal unit tests stay free of `bpy`",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "uv run python scripts/run_blender_smoke.py --suite ui_visual",
-        "Blender smoke suite `ui_visual` passed with visual contract artifact coverage",
+        "uv run python scripts/run_blender_smoke.py --suite register",
         "Final `/review` fallback status: PASS",
-        "Continue from Iteration 10: Cloud Stub",
+        "Continue from Iteration 11: QA And CI",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
@@ -431,6 +430,8 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "blender_achievements_addon_v01.zip" not in readme
     assert "blender_achievements.py" not in readme
     assert "achievements/catalog.py" in readme
+    assert "achievements/sync.py" in readme
+    assert "networking is not wired into normal add-on use" in readme
     assert "Одиночный .py" not in readme
     assert "Ожидаемые пользовательские ассеты" in readme
 
@@ -457,6 +458,15 @@ def test_runtime_docs_alignment_matches_current_policy():
     ):
         text = path.read_text(encoding="utf-8")
         assert "achievements/catalog.py" in text, path
+    architecture = (ROOT / "docs" / "agent" / "architecture.md").read_text(encoding="utf-8")
+    assert "achievements/sync.py" in architecture
+    assert "production networking is not wired into normal add-on use" in architecture
+
+    frozen_contract = (
+        ROOT / "docs" / "agent" / "frozen-application-contract.md"
+    ).read_text(encoding="utf-8")
+    assert "## Cloud Sync Stub" in frozen_contract
+    assert "Sync payloads intentionally exclude `pinned_ach_id`" in frozen_contract
 
     stale_catalog_reference = (ROOT / "achievements_100_list.md").read_text(encoding="utf-8")
     assert "stale reference" in stale_catalog_reference

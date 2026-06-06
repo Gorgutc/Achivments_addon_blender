@@ -8,6 +8,7 @@
 Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint.
 Reward manifest/access/fallback planning is isolated in `achievements/rewards.py`; Blender asset linking remains in the runtime operator.
 UI tab, pagination, scene-property, popup-width, overlay-geometry, and storage-filter contracts are isolated in `achievements/ui.py`; Blender layout and GPU drawing remain in the runtime adapter.
+Offline sync planning is isolated in `achievements/sync.py`; the backend is disabled by default, networking is not wired into normal add-on use, and pinned UI state is excluded from sync payloads.
 
 ---
 
@@ -85,6 +86,7 @@ uv run python scripts/run_blender_smoke.py --suite ui_visual
 | `achievements/events.py` | Active-time, session, scene snapshot helpers | Править учет активности без импорта `bpy` |
 | `achievements/lifecycle.py` | Idempotent registration helpers | Править hot-reload lifecycle без прямого изменения handler/timer wiring |
 | `achievements/persistence.py` | Schema migration, atomic JSON writes, corrupt recovery | Править сохранение прогресса без импорта `bpy` |
+| `achievements/sync.py` | Offline queue, disabled backend, deterministic conflicts | Plan future cloud sync without network calls in normal add-on use |
 | **139–143**   | `DIFFICULTY_XP`                               | Очки XP за сложность                  |
 | **156–167**   | `LEVEL_TITLES`                                | Звания уровней                        |
 | **190–196**   | `_difficulty_label()`                         | Метки сложности на карточках           |
@@ -412,3 +414,4 @@ grep -n 'step_check ==' __init__.py
 - URL уроков — заглушки (placeholder YouTube ссылки)
 - .blend файлы наград — не включены (создаётся заглушка при отсутствии)
 - Нет кнопки «Сбросить достижения» (по требованию)
+- Cloud sync is a disabled offline stub only: no production backend, no normal-use network calls, and no pinned overlay state sync by default.
