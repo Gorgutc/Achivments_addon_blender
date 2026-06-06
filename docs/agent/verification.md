@@ -25,6 +25,7 @@ Static verifier rules:
 - Validate complex ID coverage in `_check_complex_step`.
 - Validate duplicate file hash while the duplicate remains tracked.
 - Validate that real user progress files are not tracked.
+- Validate that sync helpers are present as tracked infra and covered by normal unit tests.
 
 Blender smoke rules:
 - Always run with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
@@ -35,3 +36,9 @@ Blender smoke rules:
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
 - Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
 - Verify UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
+
+Sync stub rules:
+- Normal sync tests run in `uv run pytest`; no Blender smoke is required while sync remains unwired to runtime.
+- `achievements/sync.py` must stay free of `bpy`, user-home path assumptions, and production network imports.
+- Disabled backends must expose no transport hook and must not make network calls.
+- Pinned UI state stays local-only unless a later explicit task changes that behavior.

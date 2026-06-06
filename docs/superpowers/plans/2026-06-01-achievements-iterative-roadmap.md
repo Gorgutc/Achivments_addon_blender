@@ -130,9 +130,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 10: Cloud Stub
 
-- [ ] Add sync models, disabled backend interface, queue, and deterministic conflict policy.
-- [ ] Keep networking disabled by default.
-- [ ] Exclude pinned UI state from sync unless a future task explicitly changes that.
+- [x] Add sync models, disabled backend interface, queue, and deterministic conflict policy.
+- [x] Keep networking disabled by default.
+- [x] Exclude pinned UI state from sync unless a future task explicitly changes that.
 
 **Acceptance:** Offline behavior remains complete, queue tests pass, conflict outcomes are documented and deterministic.
 

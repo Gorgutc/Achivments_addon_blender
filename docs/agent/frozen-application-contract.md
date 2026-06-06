@@ -6,6 +6,7 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 - Canonical add-on runtime entrypoint: `__init__.py`.
 - Catalog source of truth: `achievements/catalog.py`.
+- Offline sync planning source: `achievements/sync.py`.
 - Tracked duplicate: `achievements_v01 (4).py`; it is a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task.
 - Stale reference file: `achievements_100_list.md` documents an older 100-achievement design and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
@@ -77,6 +78,8 @@ JSON persistence keys:
 - `pinned_ach_id`
 - `daily_sessions`
 
+Sync payloads intentionally exclude `pinned_ach_id` by default. Pinned overlay state is local UI state, not cloud state, unless a future task explicitly changes that contract.
+
 Current persistence schema version: `1.0.0`.
 
 Persisted stat fields:
@@ -90,6 +93,15 @@ Persisted stat fields:
 - `renders_completed`
 
 Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without `schema_version` is migrated idempotently. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint and are passed to the engine as callbacks. Do not change persistence shape, path, migration behavior, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
+
+## Cloud Sync Stub
+
+- Cloud sync is offline-first and disabled by default.
+- `achievements/sync.py` stays pure Python with no `bpy` import, no user-home path assumptions, and no production network imports.
+- `DisabledSyncBackend` exposes no transport hook and only returns disabled results.
+- `SyncQueue` stores pending changes deterministically and deduplicates by `change_id`.
+- Conflict decisions are deterministic: newer `updated_at` wins; equal timestamps prefer local source priority; full ties use stable lexical `change_id`.
+- Normal add-on use must make no network calls. A production backend, identity model, auth flow, remote authority, and retry policy require a separate future task.
 
 ## XP And Levels
 

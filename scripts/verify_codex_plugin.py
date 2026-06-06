@@ -70,6 +70,7 @@ REQUIRED_INFRA_FILES = [
     "achievements/metadata.py",
     "achievements/persistence.py",
     "achievements/rewards.py",
+    "achievements/sync.py",
     "achievements/ui.py",
     "blender_manifest.toml",
     "pyproject.toml",
@@ -82,6 +83,7 @@ REQUIRED_INFRA_FILES = [
     "tests/test_events.py",
     "tests/test_persistence.py",
     "tests/test_rewards.py",
+    "tests/test_sync.py",
     "tests/test_ui.py",
     "tests/blender/smoke_engine.py",
     "tests/blender/smoke_lifecycle_stress.py",
@@ -220,6 +222,7 @@ def verify_extension_draft() -> None:
     lifecycle = ROOT / "achievements" / "lifecycle.py"
     persistence = ROOT / "achievements" / "persistence.py"
     rewards = ROOT / "achievements" / "rewards.py"
+    sync = ROOT / "achievements" / "sync.py"
     ui = ROOT / "achievements" / "ui.py"
     package_metadata = ROOT / "achievements" / "metadata.py"
     record("extension draft exists: blender_manifest.toml", manifest.is_file())
@@ -230,6 +233,7 @@ def verify_extension_draft() -> None:
     record("lifecycle helpers exist: achievements/lifecycle.py", lifecycle.is_file())
     record("persistence helpers exist: achievements/persistence.py", persistence.is_file())
     record("rewards helpers exist: achievements/rewards.py", rewards.is_file())
+    record("sync helpers exist: achievements/sync.py", sync.is_file())
     record("ui helpers exist: achievements/ui.py", ui.is_file())
     record("package metadata exists: achievements/metadata.py", package_metadata.is_file())
 
