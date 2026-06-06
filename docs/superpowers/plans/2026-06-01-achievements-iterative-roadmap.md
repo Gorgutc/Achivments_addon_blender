@@ -114,9 +114,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 8: Rewards Layer
 
-- [ ] Extract reward manifest, verifier, cache, importer, and manager modules.
-- [ ] Preserve fallback behavior for missing material, mesh, and geo node `.blend` assets.
-- [ ] Record asset licensing decisions before bundling any release assets.
+- [x] Extract reward manifest, verifier, cache, importer, and manager modules.
+- [x] Preserve fallback behavior for missing material, mesh, and geo node `.blend` assets.
+- [x] Record asset licensing decisions before bundling any release assets.
 
 **Acceptance:** Rewards smoke passes, reward claims persist correctly, fallbacks remain intentional, and no real user data is mutated in tests.
 

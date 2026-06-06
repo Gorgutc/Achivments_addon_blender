@@ -32,4 +32,4 @@ Blender smoke rules:
 - Verify repeated register/unregister stress cleanup and hot-reload idempotency.
 - Verify persistence schema, current `schema_version`, atomic save, hash migration, and corrupt JSON quarantine/recovery under a temporary profile.
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
-- Verify material, mesh, and geo node reward fallbacks under a temporary profile.
+- Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
