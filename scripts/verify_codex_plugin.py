@@ -64,6 +64,7 @@ REQUIRED_INFRA_FILES = [
     ".codex/hooks.json",
     "achievements/__init__.py",
     "achievements/catalog.py",
+    "achievements/engine.py",
     "achievements/events.py",
     "achievements/lifecycle.py",
     "achievements/metadata.py",
@@ -75,8 +76,10 @@ REQUIRED_INFRA_FILES = [
     "scripts/verify_codex_plugin.py",
     "scripts/verify_frozen.py",
     "tests/test_infra_scripts.py",
+    "tests/test_engine.py",
     "tests/test_events.py",
     "tests/test_persistence.py",
+    "tests/blender/smoke_engine.py",
     "tests/blender/smoke_lifecycle_stress.py",
     "tests/blender/smoke_register.py",
     "tests/blender/smoke_persistence.py",
@@ -207,6 +210,7 @@ def verify_extension_draft() -> None:
     manifest = ROOT / "blender_manifest.toml"
     package_init = ROOT / "achievements" / "__init__.py"
     catalog = ROOT / "achievements" / "catalog.py"
+    engine = ROOT / "achievements" / "engine.py"
     events = ROOT / "achievements" / "events.py"
     lifecycle = ROOT / "achievements" / "lifecycle.py"
     persistence = ROOT / "achievements" / "persistence.py"
@@ -214,6 +218,7 @@ def verify_extension_draft() -> None:
     record("extension draft exists: blender_manifest.toml", manifest.is_file())
     record("package skeleton exists: achievements/__init__.py", package_init.is_file())
     record("catalog module exists: achievements/catalog.py", catalog.is_file())
+    record("engine helpers exist: achievements/engine.py", engine.is_file())
     record("event helpers exist: achievements/events.py", events.is_file())
     record("lifecycle helpers exist: achievements/lifecycle.py", lifecycle.is_file())
     record("persistence helpers exist: achievements/persistence.py", persistence.is_file())

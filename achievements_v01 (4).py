@@ -116,6 +116,7 @@ from achievements.catalog import (
     LESSON_CATEGORIES,
     REWARD_CATEGORIES,
 )
+from achievements import engine as ach_engine
 from achievements import events as ach_events
 from achievements import lifecycle as ach_lifecycle
 from achievements import persistence as ach_persistence
@@ -502,15 +503,9 @@ def _draw_pinned_achievement():
 # =============================================
 def check_achievements():
     """Check all stat-based achievements and unlock any that are met."""
-    for ach in ACHIEVEMENTS_DEF:
-        if ach.get("check_type") != "stat":
-            continue
-        aid = ach["id"]
-        if aid in stats.unlocked:
-            continue
-        value = getattr(stats, ach["stat_key"], 0)
-        if value >= ach["goal"]:
-            _unlock_achievement(aid, ach)
+    for result in ach_engine.pending_stat_unlocks(ACHIEVEMENTS_DEF, stats):
+        ach = next(a for a in ACHIEVEMENTS_DEF if a["id"] == result.achievement_id)
+        _unlock_achievement(result.achievement_id, ach)
 
 
 def _unlock_achievement(aid, ach):
@@ -528,22 +523,7 @@ def _unlock_achievement(aid, ach):
 
 def _check_streak(daily_sessions, required_days):
     """Check if there's a consecutive streak of required_days in daily_sessions list."""
-    import datetime
-    if len(daily_sessions) < required_days:
-        return False
-    try:
-        dates = sorted(set(datetime.date.fromisoformat(d) for d in daily_sessions))
-        streak = 1
-        for i in range(1, len(dates)):
-            if (dates[i] - dates[i-1]).days == 1:
-                streak += 1
-                if streak >= required_days:
-                    return True
-            else:
-                streak = 1
-    except (ValueError, TypeError):
-        pass
-    return False
+    return ach_engine.has_streak(daily_sessions, required_days)
 
 
 def _check_complex_step(complex_id, step_check, scene):
@@ -977,18 +957,19 @@ def _check_complex_step(complex_id, step_check, scene):
 
         elif complex_id == "compositing_node_render":
             if step_check == "has_compositor":
-                if scene.use_nodes and scene.node_tree:
+                node_tree = getattr(scene, "node_tree", None)
+                if getattr(scene, "use_nodes", False) and node_tree:
                     # Check for nodes beyond default Render Layers + Composite
-                    real_nodes = [n for n in scene.node_tree.nodes
+                    real_nodes = [n for n in node_tree.nodes
                                   if n.type not in ('R_LAYERS', 'COMPOSITE', 'VIEWER', 'OUTPUT_FILE')]
                     return len(real_nodes) > 0
                 return False
 
         elif complex_id == "render_passes":
             if step_check == "has_5_passes":
-                vl = scene.view_layers.get(scene.view_layers.active.name if scene.view_layers.active else None)
-                if not vl:
-                    vl = scene.view_layers[0] if scene.view_layers else None
+                vl = getattr(bpy.context, "view_layer", None)
+                if not vl or vl.name not in scene.view_layers:
+                    vl = scene.view_layers[0] if len(scene.view_layers) else None
                 if vl:
                     pass_count = 0
                     pass_attrs = [
@@ -1266,10 +1247,11 @@ def _check_complex(complex_id, scene):
     ach = next((a for a in ACHIEVEMENTS_DEF if a.get("complex_id") == complex_id), None)
     if not ach:
         return False
-    steps = ach.get("steps", [])
-    if not steps:
-        return False
-    return all(_check_complex_step(complex_id, s["check"], scene) for s in steps)
+    result = ach_engine.evaluate_complex_achievement(
+        ach,
+        lambda cid, step_check: _check_complex_step(cid, step_check, scene),
+    )
+    return result.achieved
 
 
 def check_complex_achievements(scene=None):

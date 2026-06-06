@@ -89,7 +89,7 @@ Persisted stat fields:
 - `time_spent`
 - `renders_completed`
 
-Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without `schema_version` is migrated idempotently. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Do not change persistence shape, path, migration behavior, corrupt-file recovery, or active-time semantics without an explicit data migration task.
+Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without `schema_version` is migrated idempotently. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint and are passed to the engine as callbacks. Do not change persistence shape, path, migration behavior, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
 
 ## XP And Levels
 
@@ -182,7 +182,7 @@ Registration registers:
 - `VIEW3D_HT_header` draw callback.
 - Two `SpaceView3D` GPU draw handlers.
 
-Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke. The root entrypoint delegates idempotent class, Scene property, handler, timer, header, and draw-handler wiring to `achievements/lifecycle.py`; activity/session tracking and cached scene snapshot resets delegate to `achievements/events.py`.
+Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke. The root entrypoint delegates idempotent class, Scene property, handler, timer, header, and draw-handler wiring to `achievements/lifecycle.py`; stat/complex rule orchestration and proof/progress helpers delegate to `achievements/engine.py`; activity/session tracking and cached scene snapshot resets delegate to `achievements/events.py`.
 
 ## Function Map
 
@@ -277,4 +277,5 @@ Before editing add-on behavior:
 - Blender `register` smoke freezes registration cleanup.
 - Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, unlock-hash migration, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
+- Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior.

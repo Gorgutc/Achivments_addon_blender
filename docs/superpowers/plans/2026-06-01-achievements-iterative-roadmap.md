@@ -106,9 +106,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 7: Engine And Rule Evaluation
 
-- [ ] Extract stat and complex achievement evaluation into pure modules.
-- [ ] Add proof/result types and progress calculation interfaces.
-- [ ] Cover compositor and render-pass checks that currently log `[Achievements] complex step check error` during `smoke_rewards`.
+- [x] Extract stat and complex achievement evaluation into pure modules.
+- [x] Add proof/result types and progress calculation interfaces.
+- [x] Cover compositor and render-pass checks that currently log `[Achievements] complex step check error` during `smoke_rewards`.
 
 **Acceptance:** Pure unit tests cover rule evaluation, Blender fixtures cover complex checks, and CI does not mask runtime error markers.
 

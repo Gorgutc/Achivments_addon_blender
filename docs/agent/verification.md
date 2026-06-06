@@ -13,6 +13,7 @@ Deep Blender gate:
 - `uv run python scripts/run_blender_smoke.py --suite register`
 - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress`
 - `uv run python scripts/run_blender_smoke.py --suite persistence`
+- `uv run python scripts/run_blender_smoke.py --suite engine`
 - `uv run python scripts/run_blender_smoke.py --suite rewards`
 
 Static verifier rules:
@@ -30,4 +31,5 @@ Blender smoke rules:
 - Verify register/unregister lifecycle and cleanup.
 - Verify repeated register/unregister stress cleanup and hot-reload idempotency.
 - Verify persistence schema, current `schema_version`, atomic save, hash migration, and corrupt JSON quarantine/recovery under a temporary profile.
+- Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
 - Verify material, mesh, and geo node reward fallbacks under a temporary profile.
