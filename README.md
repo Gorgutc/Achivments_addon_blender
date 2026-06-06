@@ -14,9 +14,9 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 
 ## Установка
 
-### Вариант 1 — ZIP (release-задача)
+### Вариант 1 — ZIP
 1. `Edit → Preferences → Add-ons → Install from Disk...`
-2. Выбрать release ZIP, подготовленный отдельной release-задачей. В текущем репозитории ZIP-артефакт не хранится.
+2. Выбрать `reports/extension/achievements-0.1.0.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
 3. Включить галочку «Achievements»
 
 ### Вариант 2 — Локальная проверка из рабочей папки
@@ -77,7 +77,21 @@ GitHub Actions mirrors the local gates:
 
 - `.github/workflows/fast-gate.yml` runs `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
 - `.github/workflows/blender-smoke.yml` runs the Blender smoke suites with Blender 5.1 stable as the blocking target.
-- The same Blender smoke workflow includes a Blender 5.2 alpha canary job. The canary URL is read from the repository variable `BLENDER_5_2_ALPHA_URL`, and canary failures are non-blocking unless a future release task promotes 5.2 to a blocking target.
+- The same Blender smoke workflow includes a Blender 5.2 alpha canary job. The canary URL is read from the repository variable `BLENDER_5_2_ALPHA_URL`; when that variable is empty, the optional canary is skipped without failing the workflow.
+
+Release packaging:
+
+```bash
+uv run python scripts/build_extension.py --output-dir reports/extension --server-generate
+blender --background --command extension validate reports/extension/source
+blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension
+blender --background --command extension server-generate --repo-dir reports/extension --html
+```
+
+`scripts/build_extension.py` prepares the release source tree and prints the exact Blender extension commands. The commands are run directly from the shell so Windows process handling stays predictable.
+The helper refuses to clean or write a release source directory outside the generated `reports/` tree.
+
+The generated release package is written to `reports/extension/achievements-0.1.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and the tracked duplicate `achievements_v01 (4).py`; it includes only `blender_manifest.toml`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved.
 
 ---
 

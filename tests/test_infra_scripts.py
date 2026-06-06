@@ -73,6 +73,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "plugin manifest exists" in result.stdout
     assert "codex agent exists" in result.stdout
     assert "extension draft exists: blender_manifest.toml" in result.stdout
+    assert "release builder exists: scripts/build_extension.py" in result.stdout
     assert "package skeleton exists: achievements/__init__.py" in result.stdout
     assert "package metadata exists: achievements/metadata.py" in result.stdout
     assert "catalog module exists: achievements/catalog.py" in result.stdout
@@ -200,6 +201,10 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "blender-5-2-alpha-canary",
         "BLENDER_5_2_ALPHA_URL",
         "continue-on-error: ${{ matrix.canary }}",
+        "id: install-blender",
+        "skip_smoke=true",
+        "Skipping optional Blender 5.2 alpha canary",
+        "if: steps.install-blender.outputs.skip_smoke != 'true'",
         "BLENDER_BIN=",
         "uv run python scripts/run_blender_smoke.py --suite register",
         "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
@@ -268,6 +273,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Add GitHub Actions fast gate: `verify_frozen`, `verify_codex_plugin`, `ruff`, `pytest`.",
         "- [x] Add Blender 5.1 stable smoke gate and Blender 5.2 alpha canary gate.",
         "- [x] Align CI tooling with Python 3.13 while preserving the repository's local Python 3.11+ compatibility policy.",
+        "- [x] Finalize extension manifest metadata and release documentation.",
+        "- [x] Add validate/build commands for Blender extension packaging.",
+        "- [x] Add optional static extension repository generation only after release packaging is stable.",
     ):
         assert phrase in plan_text
 
@@ -299,40 +307,36 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 11: QA And CI",
-        ".github/workflows/fast-gate.yml",
+        "Iteration 12: Release",
         ".github/workflows/blender-smoke.yml",
-        "tests/test_catalog.py",
-        "tests/test_engine.py",
-        "tests/test_persistence.py",
-        "tests/test_rewards.py",
-        "tests/test_sync.py",
         "README.md",
+        "docs/agent/packaging-release.md",
         "docs/agent/verification.md",
         "docs/agent/quality-tooling.md",
+        "docs/handoff/current.md",
+        "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
+        "scripts/build_extension.py",
         "scripts/verify_codex_plugin.py",
         "tests/test_infra_scripts.py",
-        "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `.github/workflows/fast-gate.yml`",
-        "`verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest`",
-        "Python 3.13",
-        "Added `.github/workflows/blender-smoke.yml`",
-        "Blender 5.1 stable",
-        "Blender 5.2 alpha canary",
+        "tests/test_release_packaging.py",
+        "Added `id: install-blender` and `skip_smoke` output handling",
+        "Skipping optional Blender 5.2 alpha canary",
         "`BLENDER_5_2_ALPHA_URL`",
-        "Expanded catalog unit coverage",
-        "Expanded persistence coverage",
-        "Expanded engine coverage",
-        "Expanded rewards coverage",
-        "Expanded sync stub coverage",
-        "`__init__.py` and `achievements_v01 (4).py` untouched",
+        "Prepared a lean release source tree under `reports/extension/source`",
+        "`blender_manifest.toml`, root `__init__.py`, and `achievements/`",
+        "excludes repository docs, tests, scripts, plugins, GitHub workflow files, and `achievements_v01 (4).py`",
+        "`reports/extension/achievements-0.1.0.zip`",
+        "`found 1 packages`",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "uv run python scripts/run_blender_smoke.py --suite register",
-        "Final `/review` fallback status: PASS",
-        "Continue from Iteration 12: Release",
+        "uv run python scripts/build_extension.py --output-dir reports\\extension --server-generate",
+        "blender --background --command extension validate reports\\extension\\source",
+        "blender --background --command extension build --source-dir reports\\extension\\source --output-dir reports\\extension",
+        "blender --background --command extension server-generate --repo-dir reports\\extension --html",
+        "Final `/review` fallback status",
+        "Continue after Iteration 12 merge",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
@@ -506,6 +510,12 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert ".github/workflows/blender-smoke.yml" in readme
     assert "Python 3.13" in readme
     assert "BLENDER_5_2_ALPHA_URL" in readme
+    assert "skipped without failing the workflow" in readme
+    assert "scripts/build_extension.py" in readme
+    assert "extension validate" in readme
+    assert "extension build" in readme
+    assert "extension server-generate" in readme
+    assert "release package excludes docs/tests/plugins/scripts" in readme
     assert "catalog, persistence, engine, rewards, sync, UI" in readme
     assert "Одиночный .py" not in readme
     assert "Ожидаемые пользовательские ассеты" in readme
@@ -549,8 +559,14 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "9 lessons" in stale_catalog_reference
 
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
-    assert "draft `blender_manifest.toml` exists" in packaging_release
-    assert "not a functional extension entrypoint" in packaging_release
+    assert "Release packaging is now active Iteration 12 tooling" in packaging_release
+    assert "scripts/build_extension.py" in packaging_release
+    assert "reports/extension/source" in packaging_release
+    assert "release package excludes docs/tests/plugins/scripts" in packaging_release
+    assert "achievements_v01 (4).py` remains a permanent byte-identical duplicate" in packaging_release
+    assert "extension validate" in packaging_release
+    assert "extension build" in packaging_release
+    assert "extension server-generate" in packaging_release
     assert "Whether a Blender extension manifest is introduced" not in packaging_release
 
     verification = (ROOT / "docs" / "agent" / "verification.md").read_text(encoding="utf-8")
@@ -559,8 +575,15 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "blender-5-1-stable" in verification
     assert "blender-5-2-alpha-canary" in verification
     assert "BLENDER_5_2_ALPHA_URL" in verification
+    assert "skips its smoke steps without failing the workflow" in verification
+    assert "scripts/build_extension.py" in verification
+    assert "extension validate" in verification
+    assert "extension build" in verification
 
     quality_tooling = (ROOT / "docs" / "agent" / "quality-tooling.md").read_text(encoding="utf-8")
     assert "Python 3.13" in quality_tooling
     assert "continue-on-error" in quality_tooling
+    assert "skips rather than failing" in quality_tooling
+    assert "scripts/build_extension.py" in quality_tooling
+    assert "release package excludes docs/tests/plugins/scripts" in quality_tooling
     assert "uv run python scripts/run_blender_smoke.py --suite ui_visual" in quality_tooling
