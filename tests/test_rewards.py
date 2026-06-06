@@ -113,6 +113,34 @@ def test_reward_manifest_preserves_catalog_reward_fields_and_validates_assets():
     ]
 
 
+def test_reward_manifest_validates_tutorial_urls_and_ignores_unknown_types():
+    from achievements import rewards
+
+    manifest = rewards.RewardManifest.from_achievements(
+        [
+            {
+                "id": "bad_tutorial",
+                "reward_type": "tutorial",
+                "reward_data": {},
+            },
+            {
+                "id": "unknown_reward",
+                "reward_type": "mystery",
+                "reward_data": {"name": "Ignored"},
+            },
+            {
+                "id": "none_reward",
+                "reward_type": "none",
+                "reward_data": {},
+            },
+        ]
+    )
+
+    assert set(manifest.specs) == {"bad_tutorial"}
+    assert manifest.none_ids == {"none_reward"}
+    assert manifest.validation_errors() == ["bad_tutorial: missing url"]
+
+
 def test_reward_manager_plans_access_checks_and_non_claim_rewards(tmp_path):
     from achievements import rewards
 

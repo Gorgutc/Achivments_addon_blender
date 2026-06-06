@@ -86,6 +86,8 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
+    assert "workflow exists: .github/workflows/fast-gate.yml" in result.stdout
+    assert "workflow exists: .github/workflows/blender-smoke.yml" in result.stdout
 
 
 def test_find_blender_reports_a_usable_executable(tmp_path):
@@ -159,6 +161,58 @@ def test_blender_smoke_dry_run_uses_temp_home_and_ui_visual_suite(tmp_path):
     assert "ACHIEVEMENTS_VISUAL_QA_DIR=" in result.stdout
 
 
+def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
+    fast_workflow = ROOT / ".github" / "workflows" / "fast-gate.yml"
+    blender_workflow = ROOT / ".github" / "workflows" / "blender-smoke.yml"
+
+    assert fast_workflow.is_file(), "missing Iteration 11 fast gate workflow"
+    assert blender_workflow.is_file(), "missing Iteration 11 Blender smoke workflow"
+
+    fast_text = fast_workflow.read_text(encoding="utf-8")
+    for phrase in (
+        "name: Achievements Fast Gate",
+        "pull_request:",
+        "push:",
+        "workflow_dispatch:",
+        "permissions:",
+        "contents: read",
+        'python-version: "3.13"',
+        "astral-sh/setup-uv@v5",
+        "uv run python scripts/verify_frozen.py",
+        "uv run python scripts/verify_codex_plugin.py",
+        "uv run ruff check .",
+        "uv run pytest",
+    ):
+        assert phrase in fast_text
+
+    blender_text = blender_workflow.read_text(encoding="utf-8")
+    for phrase in (
+        "name: Achievements Blender Smoke",
+        "pull_request:",
+        "push:",
+        "workflow_dispatch:",
+        "permissions:",
+        "contents: read",
+        'python-version: "3.13"',
+        "astral-sh/setup-uv@v5",
+        "blender-5-1-stable",
+        "Blender5.1/blender-5.1.2-linux-x64.tar.xz",
+        "blender-5-2-alpha-canary",
+        "BLENDER_5_2_ALPHA_URL",
+        "continue-on-error: ${{ matrix.canary }}",
+        "BLENDER_BIN=",
+        "uv run python scripts/run_blender_smoke.py --suite register",
+        "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
+        "uv run python scripts/run_blender_smoke.py --suite persistence",
+        "uv run python scripts/run_blender_smoke.py --suite engine",
+        "uv run python scripts/run_blender_smoke.py --suite rewards",
+        "uv run python scripts/run_blender_smoke.py --suite ui_visual",
+    ):
+        assert phrase in blender_text
+    assert "canary: false" in blender_text
+    assert "canary: true" in blender_text
+
+
 def test_iteration_plan_and_handoff_artifacts_are_present():
     plan = ROOT / "docs" / "superpowers" / "plans" / "2026-06-01-achievements-iterative-roadmap.md"
     handoff_template = ROOT / "docs" / "handoff" / "iteration-handoff-template.md"
@@ -210,6 +264,10 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Add sync models, disabled backend interface, queue, and deterministic conflict policy.",
         "- [x] Keep networking disabled by default.",
         "- [x] Exclude pinned UI state from sync unless a future task explicitly changes that.",
+        "- [x] Expand unit coverage for catalog, persistence, engine, rewards, and sync stub.",
+        "- [x] Add GitHub Actions fast gate: `verify_frozen`, `verify_codex_plugin`, `ruff`, `pytest`.",
+        "- [x] Add Blender 5.1 stable smoke gate and Blender 5.2 alpha canary gate.",
+        "- [x] Align CI tooling with Python 3.13 while preserving the repository's local Python 3.11+ compatibility policy.",
     ):
         assert phrase in plan_text
 
@@ -241,28 +299,40 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 10: Cloud Stub",
-        "achievements/sync.py",
+        "Iteration 11: QA And CI",
+        ".github/workflows/fast-gate.yml",
+        ".github/workflows/blender-smoke.yml",
+        "tests/test_catalog.py",
+        "tests/test_engine.py",
+        "tests/test_persistence.py",
+        "tests/test_rewards.py",
         "tests/test_sync.py",
         "README.md",
-        "docs/agent/architecture.md",
-        "docs/agent/frozen-application-contract.md",
         "docs/agent/verification.md",
+        "docs/agent/quality-tooling.md",
         "scripts/verify_codex_plugin.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `achievements/sync.py`",
-        "`SyncChange`, `SyncQueue`, `ConflictDecision`, `SyncBackendResult`, and `DisabledSyncBackend`",
-        "networking disabled by default",
-        "Pinned UI state `pinned_ach_id` is excluded",
-        "normal unit tests stay free of `bpy`",
+        "Added `.github/workflows/fast-gate.yml`",
+        "`verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest`",
+        "Python 3.13",
+        "Added `.github/workflows/blender-smoke.yml`",
+        "Blender 5.1 stable",
+        "Blender 5.2 alpha canary",
+        "`BLENDER_5_2_ALPHA_URL`",
+        "Expanded catalog unit coverage",
+        "Expanded persistence coverage",
+        "Expanded engine coverage",
+        "Expanded rewards coverage",
+        "Expanded sync stub coverage",
+        "`__init__.py` and `achievements_v01 (4).py` untouched",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
         "uv run python scripts/run_blender_smoke.py --suite register",
         "Final `/review` fallback status: PASS",
-        "Continue from Iteration 11: QA And CI",
+        "Continue from Iteration 12: Release",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text
@@ -432,6 +502,11 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "achievements/catalog.py" in readme
     assert "achievements/sync.py" in readme
     assert "networking is not wired into normal add-on use" in readme
+    assert ".github/workflows/fast-gate.yml" in readme
+    assert ".github/workflows/blender-smoke.yml" in readme
+    assert "Python 3.13" in readme
+    assert "BLENDER_5_2_ALPHA_URL" in readme
+    assert "catalog, persistence, engine, rewards, sync, UI" in readme
     assert "Одиночный .py" not in readme
     assert "Ожидаемые пользовательские ассеты" in readme
 
@@ -477,3 +552,15 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "draft `blender_manifest.toml` exists" in packaging_release
     assert "not a functional extension entrypoint" in packaging_release
     assert "Whether a Blender extension manifest is introduced" not in packaging_release
+
+    verification = (ROOT / "docs" / "agent" / "verification.md").read_text(encoding="utf-8")
+    assert ".github/workflows/fast-gate.yml" in verification
+    assert ".github/workflows/blender-smoke.yml" in verification
+    assert "blender-5-1-stable" in verification
+    assert "blender-5-2-alpha-canary" in verification
+    assert "BLENDER_5_2_ALPHA_URL" in verification
+
+    quality_tooling = (ROOT / "docs" / "agent" / "quality-tooling.md").read_text(encoding="utf-8")
+    assert "Python 3.13" in quality_tooling
+    assert "continue-on-error" in quality_tooling
+    assert "uv run python scripts/run_blender_smoke.py --suite ui_visual" in quality_tooling

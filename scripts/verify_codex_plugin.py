@@ -57,6 +57,10 @@ REQUIRED_HOOKS = [
     ".codex/hooks/user-prompt-nudge.py",
     ".codex/hooks/post-edit-static.py",
 ]
+REQUIRED_WORKFLOWS = [
+    ".github/workflows/fast-gate.yml",
+    ".github/workflows/blender-smoke.yml",
+]
 REQUIRED_INFRA_FILES = [
     "AGENTS.md",
     ".agents/plugins/marketplace.json",
@@ -78,6 +82,7 @@ REQUIRED_INFRA_FILES = [
     "scripts/run_blender_smoke.py",
     "scripts/verify_codex_plugin.py",
     "scripts/verify_frozen.py",
+    "tests/test_catalog.py",
     "tests/test_infra_scripts.py",
     "tests/test_engine.py",
     "tests/test_events.py",
@@ -190,6 +195,8 @@ def verify_codex_mirror() -> None:
 def verify_docs() -> None:
     for doc in REQUIRED_DOCS:
         record(f"agent doc exists: {doc}", (ROOT / doc).is_file())
+    for workflow in REQUIRED_WORKFLOWS:
+        record(f"workflow exists: {workflow}", (ROOT / workflow).is_file())
     active_docs = [
         ROOT / "AGENTS.md",
         ROOT / ".codex" / "config.toml",
@@ -198,6 +205,7 @@ def verify_docs() -> None:
         PLUGIN_ROOT / ".codex-plugin" / "plugin.json",
         *[ROOT / doc for doc in REQUIRED_DOCS],
         *[ROOT / hook for hook in REQUIRED_HOOKS],
+        *[ROOT / workflow for workflow in REQUIRED_WORKFLOWS],
         *[ROOT / ".codex" / "agents" / f"{agent}.toml" for agent in REQUIRED_AGENTS],
         *[SKILL_ROOT / skill / "SKILL.md" for skill in REQUIRED_SKILLS],
         *[SKILL_ROOT / skill / "agents" / "openai.yaml" for skill in REQUIRED_SKILLS],
@@ -246,6 +254,7 @@ def verify_tracked_required_files() -> None:
     required = set(REQUIRED_INFRA_FILES)
     required.update(REQUIRED_DOCS)
     required.update(REQUIRED_HOOKS)
+    required.update(REQUIRED_WORKFLOWS)
     required.update(f".codex/agents/{agent}.toml" for agent in REQUIRED_AGENTS)
     for skill in REQUIRED_SKILLS:
         required.add(f"plugins/{PLUGIN_NAME}/skills/{skill}/SKILL.md")

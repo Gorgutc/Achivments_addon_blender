@@ -60,6 +60,8 @@ uv run ruff check .
 uv run pytest
 ```
 
+Normal `pytest` coverage includes pure helpers for catalog, persistence, engine, rewards, sync, UI, and smoke-runner command construction without importing `bpy`.
+
 Blender smoke запускается только через временные `HOME`, `USERPROFILE` и `BLENDER_USER_RESOURCES`; эти проверки не должны писать в реальный `~/BlenderAchievements`:
 
 ```bash
@@ -70,6 +72,12 @@ uv run python scripts/run_blender_smoke.py --suite engine
 uv run python scripts/run_blender_smoke.py --suite rewards
 uv run python scripts/run_blender_smoke.py --suite ui_visual
 ```
+
+GitHub Actions mirrors the local gates:
+
+- `.github/workflows/fast-gate.yml` runs `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
+- `.github/workflows/blender-smoke.yml` runs the Blender smoke suites with Blender 5.1 stable as the blocking target.
+- The same Blender smoke workflow includes a Blender 5.2 alpha canary job. The canary URL is read from the repository variable `BLENDER_5_2_ALPHA_URL`, and canary failures are non-blocking unless a future release task promotes 5.2 to a blocking target.
 
 ---
 

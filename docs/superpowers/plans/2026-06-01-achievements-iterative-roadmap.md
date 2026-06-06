@@ -138,10 +138,10 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 11: QA And CI
 
-- [ ] Expand unit coverage for catalog, persistence, engine, rewards, and sync stub.
-- [ ] Add GitHub Actions fast gate: `verify_frozen`, `verify_codex_plugin`, `ruff`, `pytest`.
-- [ ] Add Blender 5.1 stable smoke gate and Blender 5.2 alpha canary gate.
-- [ ] Align local tooling with Python 3.13 when the runtime/tooling task is explicitly in scope.
+- [x] Expand unit coverage for catalog, persistence, engine, rewards, and sync stub.
+- [x] Add GitHub Actions fast gate: `verify_frozen`, `verify_codex_plugin`, `ruff`, `pytest`.
+- [x] Add Blender 5.1 stable smoke gate and Blender 5.2 alpha canary gate.
+- [x] Align CI tooling with Python 3.13 while preserving the repository's local Python 3.11+ compatibility policy.
 
 **Acceptance:** Local and CI command names agree, stable gates are blocking, and canary gates are clearly marked.
 

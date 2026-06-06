@@ -86,6 +86,38 @@ def test_legacy_payload_migrates_idempotently_and_generates_missing_hashes():
     assert migrated["unlock_hashes"] == {"first_vertex": "hash-first_vertex"}
 
 
+def test_invalid_payload_values_are_sanitized_and_deduplicated():
+    from achievements import persistence as ach_persistence
+
+    payload = {
+        "schema_version": ach_persistence.SCHEMA_VERSION,
+        "stats": {
+            "vertices_created": "7",
+            "vertices_deleted": None,
+            "edges_created": "bad",
+            "faces_created": 2.9,
+        },
+        "unlocked": ["b", 3, "a", "a"],
+        "unlock_hashes": {"b": 22},
+        "rewards_claimed": ["reward_b", "reward_a", "reward_a", 5],
+        "pinned_ach_id": 123,
+        "daily_sessions": ["2026-06-01", None, "2026-06-02"],
+    }
+
+    normalized, report = ach_persistence.normalize_payload(payload, make_unlock_hash=hash_for)
+
+    assert report.migrated
+    assert normalized["stats"]["vertices_created"] == 7
+    assert normalized["stats"]["vertices_deleted"] == 0
+    assert normalized["stats"]["edges_created"] == 0
+    assert normalized["stats"]["faces_created"] == 2
+    assert normalized["unlocked"] == ["a", "b"]
+    assert normalized["unlock_hashes"] == {"a": "hash-a", "b": "22"}
+    assert normalized["rewards_claimed"] == ["reward_a", "reward_b"]
+    assert normalized["pinned_ach_id"] == ""
+    assert normalized["daily_sessions"] == ["2026-06-01", "2026-06-02"]
+
+
 def test_payload_round_trip_from_stats_uses_current_schema():
     from achievements import persistence as ach_persistence
 
