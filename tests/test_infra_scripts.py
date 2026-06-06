@@ -81,6 +81,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
     assert "persistence helpers exist: achievements/persistence.py" in result.stdout
     assert "rewards helpers exist: achievements/rewards.py" in result.stdout
+    assert "ui helpers exist: achievements/ui.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -144,6 +145,19 @@ def test_blender_smoke_dry_run_uses_temp_home_and_engine_suite(tmp_path):
     assert "BLENDER_USER_RESOURCES" in result.stdout
 
 
+def test_blender_smoke_dry_run_uses_temp_home_and_ui_visual_suite(tmp_path):
+    env = {**os.environ, "BLENDER_BIN": str(fake_blender(tmp_path))}
+    result = run_script("scripts/run_blender_smoke.py", "--suite", "ui_visual", "--dry-run", env=env)
+    assert result.returncode == 0, result.stdout
+    assert "--background" in result.stdout
+    assert "--factory-startup" in result.stdout
+    assert "tests/blender/smoke_ui_visual.py" in result.stdout.replace("\\", "/")
+    assert "HOME=" in result.stdout
+    assert "USERPROFILE=" in result.stdout
+    assert "BLENDER_USER_RESOURCES" in result.stdout
+    assert "ACHIEVEMENTS_VISUAL_QA_DIR=" in result.stdout
+
+
 def test_iteration_plan_and_handoff_artifacts_are_present():
     plan = ROOT / "docs" / "superpowers" / "plans" / "2026-06-01-achievements-iterative-roadmap.md"
     handoff_template = ROOT / "docs" / "handoff" / "iteration-handoff-template.md"
@@ -189,6 +203,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Extract reward manifest, verifier, cache, importer, and manager modules.",
         "- [x] Preserve fallback behavior for missing material, mesh, and geo node `.blend` assets.",
         "- [x] Record asset licensing decisions before bundling any release assets.",
+        "- [x] Split Scene properties, operators, popup tabs/cards, notifications, and pinned overlay into UI modules.",
+        "- [x] Preserve tabs: `Задания`, `Выполнено`, `Уроки`, `Хранилище`.",
+        "- [x] Run screenshot-based visual QA for header button, popup layout, pinned overlay, notifications, and long text.",
     ):
         assert phrase in plan_text
 
@@ -220,34 +237,33 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 8: Rewards Layer",
-        "achievements/rewards.py",
-        "tests/test_rewards.py",
+        "Iteration 9: UI Split And Visual QA",
+        "achievements/ui.py",
+        "tests/test_ui.py",
         "__init__.py",
         "achievements_v01 (4).py",
         "README.md",
         "docs/agent/frozen-application-contract.md",
-        "docs/agent/packaging-release.md",
         "docs/agent/verification.md",
         "scripts/verify_codex_plugin.py",
         "scripts/verify_frozen.py",
         "scripts/run_blender_smoke.py",
-        "tests/blender/smoke_rewards.py",
+        "tests/blender/smoke_ui_visual.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `achievements/rewards.py`",
-        "`RewardSpec`, `RewardAction`, `RewardResult`, `RewardManifest`, `RewardVerifier`, `AssetCache`, and `RewardManager`",
-        "reward manifest, verifier, cache, importer/action planner, and manager",
-        "material, mesh, and geo node fallback behavior",
-        "asset licensing policy remains release-blocked",
+        "Added `achievements/ui.py`",
+        "`TabSpec`, `ScenePropertySpec`, `GridPagePlan`, and `OverlayFrame`",
+        "UI tab specs, Scene property specs, pagination plans, popup dialog width",
+        "Preserved tabs `Задания / Выполнено / Уроки / Хранилище`",
+        "long RU/EN text budgets",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "uv run python scripts/run_blender_smoke.py --suite rewards",
-        "Blender smoke suite `rewards` passed with fallback and claim persistence checks",
+        "uv run python scripts/run_blender_smoke.py --suite ui_visual",
+        "Blender smoke suite `ui_visual` passed with visual contract artifact coverage",
         "Final `/review` fallback status: PASS",
-        "Continue from Iteration 9: UI Split And Visual QA",
+        "Continue from Iteration 10: Cloud Stub",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text

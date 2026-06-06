@@ -121,6 +121,7 @@ from achievements import events as ach_events
 from achievements import lifecycle as ach_lifecycle
 from achievements import persistence as ach_persistence
 from achievements import rewards as ach_rewards
+from achievements import ui as ach_ui
 
 
 _REWARD_MANIFEST = ach_rewards.RewardManifest.from_achievements(ACHIEVEMENTS_DEF)
@@ -324,15 +325,12 @@ def _draw_rect(x, y, w, h, color):
 
 def _reward_type_label(rtype):
     """Return a human-readable Russian label for reward type."""
-    return {"tutorial": "Награда: урок", "material": "Награда: материал",
-            "mesh": "Награда: меш", "geo_nodes": "Награда: Geometry Nodes",
-            "none": ""}.get(rtype, "")
+    return ach_ui.reward_type_label(rtype)
 
 
 def _ease_out_cubic(t):
     """Cubic ease-out for smooth slide-in animation."""
-    t = max(0.0, min(1.0, t))
-    return 1.0 - (1.0 - t) ** 3
+    return ach_ui.ease_out_cubic(t)
 
 
 def _draw_notifications():
@@ -352,18 +350,10 @@ def _draw_notifications():
             continue
         ach = notif["ach"]
 
-        # Alpha: fade in + fade out
-        alpha = 1.0
-        if elapsed < NOTIFY_SLIDE_IN:
-            alpha = _ease_out_cubic(elapsed / NOTIFY_SLIDE_IN)
-        elif elapsed > (NOTIFY_DURATION - 2.0):
-            alpha = max(0.0, (NOTIFY_DURATION - elapsed) / 2.0)
-
-        # Steam-style: bottom-left corner, slide up from below
-        slide_t = _ease_out_cubic(min(elapsed / NOTIFY_SLIDE_IN, 1.0))
-        target_y = NOTIFY_MARGIN + i * (NOTIFY_HEIGHT + 10)
-        ny = target_y * slide_t - (NOTIFY_HEIGHT * (1.0 - slide_t))
-        nx = NOTIFY_MARGIN
+        frame = ach_ui.notification_frame(i, elapsed)
+        alpha = frame.alpha
+        nx = frame.x
+        ny = frame.y
 
         # Background
         _draw_rect(nx, ny, NOTIFY_WIDTH, NOTIFY_HEIGHT, (0.10, 0.12, 0.16, 0.95 * alpha))
@@ -371,13 +361,12 @@ def _draw_notifications():
         _draw_rect(nx, ny, 4, NOTIFY_HEIGHT, (0.3, 0.8, 0.45, alpha))
 
         # Icon placeholder 100x100
-        icon_x = nx + NOTIFY_PADDING
-        icon_y = ny + (NOTIFY_HEIGHT - NOTIFY_ICON_SIZE) / 2
+        icon_x, icon_y, _, _ = frame.icon_rect
         _draw_rect(icon_x, icon_y, NOTIFY_ICON_SIZE, NOTIFY_ICON_SIZE,
                    (0.28, 0.30, 0.34, 0.7 * alpha))
 
         font_id = 0
-        tx = icon_x + NOTIFY_ICON_SIZE + NOTIFY_PADDING
+        tx = frame.text_x
 
         # 3 lines, vertically centered
         line_heights = [20, 20, 16]
@@ -394,13 +383,13 @@ def _draw_notifications():
         blf.size(font_id, 20)
         y2 = y1 - NOTIFY_TEXT_GAP - line_heights[1]
         blf.position(font_id, tx, y2, 0)
-        blf.draw(font_id, ach["title"])
+        blf.draw(font_id, ach_ui.overlay_title_text(ach["title"]))
 
         blf.color(font_id, 0.6, 0.63, 0.68, alpha)
         blf.size(font_id, 16)
         y3 = y2 - NOTIFY_TEXT_GAP - line_heights[2]
         blf.position(font_id, tx, y3, 0)
-        blf.draw(font_id, ach["description"])
+        blf.draw(font_id, ach_ui.overlay_description_text(ach["description"]))
 
     for idx in reversed(expired):
         _pending_notifications.pop(idx)
@@ -427,13 +416,9 @@ def _draw_pinned_achievement():
     if region is None:
         return
 
-    # Position above notifications (if any)
-    notif_offset = 0
-    if _pending_notifications:
-        notif_offset = len(_pending_notifications) * (NOTIFY_HEIGHT + 10) + 10
-
-    px = PIN_MARGIN_X
-    py = PIN_MARGIN_Y + notif_offset
+    frame = ach_ui.pinned_frame(len(_pending_notifications))
+    px = frame.x
+    py = frame.y
 
     # Background — same size as notification
     _draw_rect(px, py, NOTIFY_WIDTH, NOTIFY_HEIGHT, (0.12, 0.14, 0.18, 0.85))
@@ -441,13 +426,12 @@ def _draw_pinned_achievement():
     _draw_rect(px, py, 4, NOTIFY_HEIGHT, (0.9, 0.75, 0.2, 1.0))
 
     # Icon 100x100 (same as notifications)
-    icon_x = px + NOTIFY_PADDING
-    icon_y = py + (NOTIFY_HEIGHT - NOTIFY_ICON_SIZE) / 2
+    icon_x, icon_y, _, _ = frame.icon_rect
     _draw_rect(icon_x, icon_y, NOTIFY_ICON_SIZE, NOTIFY_ICON_SIZE,
                (0.28, 0.30, 0.34, 0.7))
 
     font_id = 0
-    tx = icon_x + NOTIFY_ICON_SIZE + NOTIFY_PADDING
+    tx = frame.text_x
 
     # Progress calculation — depends on check_type
     if ach.get("check_type") == "complex":
@@ -475,19 +459,19 @@ def _draw_pinned_achievement():
     blf.size(font_id, 20)
     y1 = text_top - line_heights[0]
     blf.position(font_id, tx, y1, 0)
-    blf.draw(font_id, ach["title"])
+    blf.draw(font_id, ach_ui.overlay_title_text(ach["title"]))
 
     # Line 2: Description (16px, gray)
     blf.color(font_id, 0.6, 0.63, 0.68, 1.0)
     blf.size(font_id, 16)
     y2 = y1 - NOTIFY_TEXT_GAP - line_heights[1]
     blf.position(font_id, tx, y2, 0)
-    blf.draw(font_id, ach["description"])
+    blf.draw(font_id, ach_ui.overlay_description_text(ach["description"]))
 
     # Line 3: Progress bar + percentage
     bar_y = y2 - NOTIFY_TEXT_GAP - 14
     bar_x = tx
-    bar_w_max = NOTIFY_WIDTH - (tx - px) - NOTIFY_PADDING - 50  # space for "%"
+    bar_w_max = frame.progress_bar_width  # space for "%"
     bar_h = 8
     _draw_rect(bar_x, bar_y, bar_w_max, bar_h, (0.25, 0.27, 0.30, 1.0))
     _draw_rect(bar_x, bar_y, bar_w_max * progress, bar_h, (0.9, 0.75, 0.2, 1.0))
@@ -1635,11 +1619,7 @@ class ACH_OT_PageNext(bpy.types.Operator):
 def _tab_prop(tab):
     """Map tab key to Scene property name for pagination.
     Supports category-specific keys like TASKS_EDITING -> ach_page_tasks_editing."""
-    base = {"TASKS": "ach_page_tasks", "DONE": "ach_page_done",
-            "LESSONS": "ach_page_lessons", "STORAGE": "ach_page_storage"}
-    if tab in base:
-        return base[tab]
-    return f"ach_page_{tab.lower()}"
+    return ach_ui.tab_page_property(tab)
 
 
 # =============================================
@@ -1718,9 +1698,9 @@ def _draw_unified_card(parent, ach=None, lesson=None, unlocked=False,
         diff = ach.get("difficulty", "medium")
         diff_text, diff_icon = _difficulty_label(diff)
         xp_pts = DIFFICULTY_XP.get(diff, 10)
-        title_label.label(text=f"{title}  [{diff_text} +{xp_pts}XP]")
+        title_label.label(text=f"{ach_ui.card_title_text(title)}  [{diff_text} +{xp_pts}XP]")
     else:
-        title_label.label(text=title)
+        title_label.label(text=ach_ui.card_title_text(title))
     # Pin button — always active (separate from disabled row)
     if show_pin and ach:
         is_pinned = (stats.pinned_ach_id == ach["id"])
@@ -1736,7 +1716,7 @@ def _draw_unified_card(parent, ach=None, lesson=None, unlocked=False,
     desc_row.scale_y = 0.9
     if ach and not unlocked:
         desc_row.enabled = False
-    desc_row.label(text=desc)
+    desc_row.label(text=ach_ui.card_description_text(desc))
 
     # Progress (only for task cards)
     if show_progress and ach:
@@ -1820,10 +1800,10 @@ def _draw_unified_card(parent, ach=None, lesson=None, unlocked=False,
 def _draw_grid_page(layout, items, scn, tab_key, draw_func):
     """Draw a paginated grid of cards."""
     page_prop = _tab_prop(tab_key)
-    total_pages = max(1, math.ceil(len(items) / PAGE_SIZE))
-    page = min(getattr(scn, page_prop, 0), total_pages - 1)
-    start = page * PAGE_SIZE
-    page_items = items[start:start + PAGE_SIZE]
+    page_plan = ach_ui.grid_page_plan(len(items), getattr(scn, page_prop, 0))
+    total_pages = page_plan.total_pages
+    page = page_plan.page
+    page_items = items[page_plan.start:page_plan.end]
 
     for row_start in range(0, len(page_items), GRID_COLS):
         row_items = page_items[row_start:row_start + GRID_COLS]
@@ -1864,7 +1844,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
     def invoke(self, context, event):
         _flush_session_time()
         wm = context.window_manager
-        dialog_w = int(GRID_COLS * _CARD_W * _UNIT + 80)
+        dialog_w = ach_ui.popup_dialog_width()
         return wm.invoke_popup(self, width=dialog_w)
 
     def draw(self, context):
@@ -1900,10 +1880,8 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
 
         # Tab buttons
         row = layout.row(align=True)
-        row.prop_enum(scn, "ach_tab", "TASKS",   text="Задания")
-        row.prop_enum(scn, "ach_tab", "DONE",    text="Выполнено")
-        row.prop_enum(scn, "ach_tab", "LESSONS", text="Уроки")
-        row.prop_enum(scn, "ach_tab", "STORAGE", text="Хранилище")
+        for tab_spec in ach_ui.TABS:
+            row.prop_enum(scn, "ach_tab", tab_spec.key, text=tab_spec.label)
         layout.separator(factor=0.3)
 
         tab = scn.ach_tab
@@ -1917,7 +1895,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             self._tab_storage(layout, scn)
 
     def _tab_tasks(self, layout, scn):
-        items = [a for a in ACHIEVEMENTS_DEF if a["id"] not in stats.unlocked]
+        items = ach_ui.task_items(ACHIEVEMENTS_DEF, stats.unlocked)
         if not items:
             layout.label(text="Все достижения получены!", icon="CHECKMARK")
             return
@@ -1926,7 +1904,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             _draw_unified_card(parent, ach=ach, unlocked=False, show_progress=True, show_pin=True)
 
         for cat_id, cat_name in ACH_CATEGORIES:
-            cat_items = [a for a in items if a.get("category") == cat_id]
+            cat_items = ach_ui.items_for_category(items, cat_id, key="category")
             if not cat_items:
                 continue
             box = layout.box()
@@ -1939,7 +1917,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
                 _draw_grid_page(col, cat_items, scn, f"TASKS_{cat_id}", draw_card)
 
     def _tab_done(self, layout, scn):
-        items = [a for a in ACHIEVEMENTS_DEF if a["id"] in stats.unlocked]
+        items = ach_ui.done_items(ACHIEVEMENTS_DEF, stats.unlocked)
         if not items:
             layout.label(text="Пока нет выполненных", icon="INFO")
             return
@@ -1948,7 +1926,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             _draw_unified_card(parent, ach=ach, unlocked=True, show_reward_btn=True)
 
         for cat_id, cat_name in ACH_CATEGORIES:
-            cat_items = [a for a in items if a.get("category") == cat_id]
+            cat_items = ach_ui.items_for_category(items, cat_id, key="category")
             if not cat_items:
                 continue
             box = layout.box()
@@ -1969,7 +1947,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             _draw_unified_card(parent, lesson=lesson, unlocked=True, show_lesson_btn=True)
 
         for cat_id, cat_name in LESSON_CATEGORIES:
-            cat_items = [l for l in LESSONS_DEF if l.get("category") == cat_id]
+            cat_items = ach_ui.items_for_category(LESSONS_DEF, cat_id, key="category")
             if not cat_items:
                 continue
             box = layout.box()
@@ -1982,8 +1960,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
                 _draw_grid_page(col, cat_items, scn, f"LESSONS_{cat_id}", draw_card)
 
     def _tab_storage(self, layout, scn):
-        items = [a for a in ACHIEVEMENTS_DEF
-                 if a["id"] in stats.unlocked and a.get("reward_type") in ("material", "mesh", "geo_nodes")]
+        items = ach_ui.storage_items(ACHIEVEMENTS_DEF, stats.unlocked)
         if not items:
             layout.label(text="Нет полученных наград", icon="INFO")
             return
@@ -1992,7 +1969,7 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             _draw_unified_card(parent, ach=ach, unlocked=True, show_reward_btn=True)
 
         for cat_id, cat_name in REWARD_CATEGORIES:
-            cat_items = [a for a in items if a.get("reward_category") == cat_id]
+            cat_items = ach_ui.items_for_category(items, cat_id, key="reward_category")
             if not cat_items:
                 continue
             box = layout.box()
@@ -2034,39 +2011,29 @@ _classes = (
 
 
 def _base_scene_properties():
-    return {
-        "ach_tab": bpy.props.EnumProperty(
-            items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
-                   ("LESSONS", "Уроки", ""), ("STORAGE", "Хранилище", "")],
-            default="TASKS"),
-        "ach_page_tasks": bpy.props.IntProperty(default=0, min=0),
-        "ach_page_done": bpy.props.IntProperty(default=0, min=0),
-        "ach_page_lessons": bpy.props.IntProperty(default=0, min=0),
-        "ach_page_storage": bpy.props.IntProperty(default=0, min=0),
-    }
+    props = {}
+    for spec in ach_ui.base_scene_property_specs():
+        if spec.kind == "enum":
+            props[spec.name] = bpy.props.EnumProperty(items=spec.items, default=spec.default)
+        elif spec.kind == "int":
+            props[spec.name] = bpy.props.IntProperty(default=spec.default, min=spec.min_value or 0)
+        elif spec.kind == "bool":
+            props[spec.name] = bpy.props.BoolProperty(default=spec.default)
+    return props
 
 
 def _category_scene_properties():
     props = {}
-    for cat_id, _ in ACH_CATEGORIES:
-        props.update({
-            f"ach_acc_tasks_{cat_id}": bpy.props.BoolProperty(default=(cat_id == "EDITING")),
-            f"ach_acc_done_{cat_id}": bpy.props.BoolProperty(default=False),
-            f"ach_acc_lessons_{cat_id}": bpy.props.BoolProperty(default=False),
-            f"ach_page_tasks_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
-            f"ach_page_done_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
-            f"ach_page_lessons_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
-        })
-    for cat_id, _ in REWARD_CATEGORIES:
-        props.update({
-            f"ach_acc_storage_{cat_id}": bpy.props.BoolProperty(default=False),
-            f"ach_page_storage_{cat_id.lower()}": bpy.props.IntProperty(default=0, min=0),
-        })
+    for spec in ach_ui.category_scene_property_specs(ACH_CATEGORIES, REWARD_CATEGORIES):
+        if spec.kind == "int":
+            props[spec.name] = bpy.props.IntProperty(default=spec.default, min=spec.min_value or 0)
+        elif spec.kind == "bool":
+            props[spec.name] = bpy.props.BoolProperty(default=spec.default)
     return props
 
 
 def _scene_property_names():
-    return [*_base_scene_properties(), *_category_scene_properties()]
+    return ach_ui.scene_property_names(ACH_CATEGORIES, REWARD_CATEGORIES)
 
 
 def _register_scene_properties():

@@ -122,9 +122,9 @@ The MVP preserves the current full catalog rather than reducing scope: all 105 a
 
 ## Iteration 9: UI Split And Visual QA
 
-- [ ] Split Scene properties, operators, popup tabs/cards, notifications, and pinned overlay into UI modules.
-- [ ] Preserve tabs: `Задания`, `Выполнено`, `Уроки`, `Хранилище`.
-- [ ] Run screenshot-based visual QA for header button, popup layout, pinned overlay, notifications, and long text.
+- [x] Split Scene properties, operators, popup tabs/cards, notifications, and pinned overlay into UI modules.
+- [x] Preserve tabs: `Задания`, `Выполнено`, `Уроки`, `Хранилище`.
+- [x] Run screenshot-based visual QA for header button, popup layout, pinned overlay, notifications, and long text.
 
 **Acceptance:** Blender smoke passes and `blender_ui_visual_qa` approves visual evidence.
 

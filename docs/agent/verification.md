@@ -15,6 +15,7 @@ Deep Blender gate:
 - `uv run python scripts/run_blender_smoke.py --suite persistence`
 - `uv run python scripts/run_blender_smoke.py --suite engine`
 - `uv run python scripts/run_blender_smoke.py --suite rewards`
+- `uv run python scripts/run_blender_smoke.py --suite ui_visual`
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.
@@ -33,3 +34,4 @@ Blender smoke rules:
 - Verify persistence schema, current `schema_version`, atomic save, hash migration, and corrupt JSON quarantine/recovery under a temporary profile.
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
 - Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
+- Verify UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
