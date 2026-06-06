@@ -12,4 +12,6 @@ Future release work should decide:
 - Whether `bl_info` is updated to Blender 5.0+.
 - Which smoke suites are required before release.
 
+Iteration 8 asset policy: no reward `.blend` assets are bundled or promoted into an official extension package until licenses are explicitly approved. The add-on must continue to work through missing-asset fallbacks for material, mesh, and geo node rewards.
+
 Until the release task is started, release packaging checks are non-blocking. Do not create release archives from this draft layer alone.

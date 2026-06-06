@@ -80,6 +80,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "event helpers exist: achievements/events.py" in result.stdout
     assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
     assert "persistence helpers exist: achievements/persistence.py" in result.stdout
+    assert "rewards helpers exist: achievements/rewards.py" in result.stdout
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
@@ -185,6 +186,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "- [x] Extract stat and complex achievement evaluation into pure modules.",
         "- [x] Add proof/result types and progress calculation interfaces.",
         "- [x] Cover compositor and render-pass checks that currently log `[Achievements] complex step check error` during `smoke_rewards`.",
+        "- [x] Extract reward manifest, verifier, cache, importer, and manager modules.",
+        "- [x] Preserve fallback behavior for missing material, mesh, and geo node `.blend` assets.",
+        "- [x] Record asset licensing decisions before bundling any release assets.",
     ):
         assert phrase in plan_text
 
@@ -216,34 +220,34 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 7: Engine And Rule Evaluation",
-        "achievements/engine.py",
-        "tests/test_engine.py",
+        "Iteration 8: Rewards Layer",
+        "achievements/rewards.py",
+        "tests/test_rewards.py",
         "__init__.py",
         "achievements_v01 (4).py",
         "README.md",
         "docs/agent/frozen-application-contract.md",
+        "docs/agent/packaging-release.md",
         "docs/agent/verification.md",
         "scripts/verify_codex_plugin.py",
         "scripts/verify_frozen.py",
         "scripts/run_blender_smoke.py",
-        "tests/blender/smoke_engine.py",
+        "tests/blender/smoke_rewards.py",
         "tests/test_infra_scripts.py",
         "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "Added `achievements/engine.py`",
-        "`StepProof`, `RuleEvaluation`, and `AchievementProgress`",
-        "stat threshold evaluation",
-        "complex-step proof aggregation",
-        "compositor/render-pass error markers",
+        "Added `achievements/rewards.py`",
+        "`RewardSpec`, `RewardAction`, `RewardResult`, `RewardManifest`, `RewardVerifier`, `AssetCache`, and `RewardManager`",
+        "reward manifest, verifier, cache, importer/action planner, and manager",
+        "material, mesh, and geo node fallback behavior",
+        "asset licensing policy remains release-blocked",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
         "uv run ruff check .",
         "uv run pytest",
-        "uv run python scripts/run_blender_smoke.py --suite engine",
         "uv run python scripts/run_blender_smoke.py --suite rewards",
-        "Blender smoke suites `engine` and `rewards` passed without complex step error markers",
+        "Blender smoke suite `rewards` passed with fallback and claim persistence checks",
         "Final `/review` fallback status: PASS",
-        "Continue from Iteration 8: Rewards Layer",
+        "Continue from Iteration 9: UI Split And Visual QA",
     ):
         assert phrase in current_text
     assert "Final gate to run" not in current_text

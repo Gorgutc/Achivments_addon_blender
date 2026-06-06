@@ -120,8 +120,11 @@ from achievements import engine as ach_engine
 from achievements import events as ach_events
 from achievements import lifecycle as ach_lifecycle
 from achievements import persistence as ach_persistence
+from achievements import rewards as ach_rewards
 
 
+_REWARD_MANIFEST = ach_rewards.RewardManifest.from_achievements(ACHIEVEMENTS_DEF)
+_REWARD_ASSET_CACHE = ach_rewards.AssetCache()
 
 # =============================================
 #  XP & LEVEL SYSTEM
@@ -1488,50 +1491,48 @@ class ACH_OT_ApplyReward(bpy.types.Operator):
     ach_id: bpy.props.StringProperty(default="")
 
     def execute(self, context):
-        ach = next((a for a in ACHIEVEMENTS_DEF if a["id"] == self.ach_id), None)
-        if not ach:
-            self.report({'WARNING'}, "Achievement not found")
-            return {'CANCELLED'}
-        if ach["id"] not in stats.unlocked:
-            self.report({'WARNING'}, "Achievement not earned")
+        manager = ach_rewards.RewardManager(
+            _REWARD_MANIFEST,
+            data_dir=DATA_DIR,
+            asset_cache=_REWARD_ASSET_CACHE,
+        )
+        result = manager.resolve(
+            self.ach_id,
+            stats,
+            ach_rewards.RewardVerifier(_verify_unlock),
+        )
+        if result.status == "cancelled" and result.report:
+            level, message = result.report
+            self.report({level}, message)
             return {'CANCELLED'}
 
-        # Reward protection: verify unlock hash
-        stored_hash = stats.unlock_hashes.get(ach["id"], "")
-        if not _verify_unlock(ach["id"], stored_hash):
-            self.report({'ERROR'}, "Unlock verification failed")
-            return {'CANCELLED'}
-
-        rtype = ach.get("reward_type", "none")
-        rdata = ach.get("reward_data", {})
-
-        if rtype == "tutorial":
-            url = rdata.get("url", "")
-            if url:
-                bpy.ops.wm.url_open(url=url)
+        action = result.action
+        if action.kind == "open_tutorial":
+            if action.url:
+                bpy.ops.wm.url_open(url=action.url)
             return {'FINISHED'}
-        if rtype == "none":
-            self.report({'INFO'}, "No reward")
+        if action.kind == "none":
+            if result.report:
+                level, message = result.report
+                self.report({level}, message)
             return {'FINISHED'}
 
         obj = context.active_object
-        blend_path = os.path.join(DATA_DIR, rdata.get("blend_file", ""))
-        rname = rdata.get("name", "ACH_Reward")
-        rdesc = rdata.get("description", "")
+        if action.kind == "link_asset" and action.asset_path is not None:
+            self._link(context, action.reward_type, str(action.asset_path), action.name, obj)
+        elif action.kind == "placeholder_material":
+            self._ph_mat(action.name, obj)
+        elif action.kind == "placeholder_mesh":
+            self._ph_mesh(context, action.name)
+        elif action.kind == "placeholder_geo_nodes":
+            self._ph_geo(action.name, obj)
 
-        if os.path.exists(blend_path):
-            self._link(context, rtype, blend_path, rname, obj)
-        else:
-            if rtype == "material":
-                self._ph_mat(rname, obj)
-            elif rtype == "mesh":
-                self._ph_mesh(context, rname)
-            elif rtype == "geo_nodes":
-                self._ph_geo(rname, obj)
-
-        stats.rewards_claimed.add(ach["id"])
-        save_data()
-        self.report({'INFO'}, f"Reward: {rdesc}")
+        if result.mark_claimed:
+            stats.rewards_claimed.add(self.ach_id)
+            save_data()
+        if result.report:
+            level, message = result.report
+            self.report({level}, message)
         return {'FINISHED'}
 
     def _link(self, ctx, rtype, bp, name, obj):

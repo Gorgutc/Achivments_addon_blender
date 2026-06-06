@@ -6,6 +6,7 @@
 Каталог достижений и уроков теперь находится в `achievements/catalog.py`; корневой `__init__.py` остаётся Blender runtime entrypoint и импортирует legacy-имена каталога для совместимости.
 
 Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint.
+Reward manifest/access/fallback planning is isolated in `achievements/rewards.py`; Blender asset linking remains in the runtime operator.
 
 ---
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -71,10 +72,21 @@ def main() -> None:
             fail(f"geo reward returned {result}")
         if geo_ach["reward_data"]["name"] not in cube.modifiers:
             fail("placeholder geo nodes modifier was not created")
+
+        expected_claims = {material_ach["id"], mesh_ach["id"], geo_ach["id"]}
+        if not expected_claims.issubset(module.stats.rewards_claimed):
+            fail(f"reward claims missing from runtime stats: {module.stats.rewards_claimed}")
+        saved = json.loads(Path(module.DATA_FILE).read_text(encoding="utf-8"))
+        if not expected_claims.issubset(set(saved.get("rewards_claimed", []))):
+            fail("reward claims were not persisted to JSON")
+        module.stats.rewards_claimed.clear()
+        module.load_data()
+        if not expected_claims.issubset(module.stats.rewards_claimed):
+            fail("reward claims did not survive load_data")
     finally:
         module.unregister()
 
-    print("[smoke_rewards:PASS] material, mesh, and geo reward fallbacks clean")
+    print("[smoke_rewards:PASS] material, mesh, geo fallbacks, and claim persistence clean")
 
 
 if __name__ == "__main__":

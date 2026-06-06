@@ -2,68 +2,66 @@
 
 ## Goal
 
-Iteration 7: Engine And Rule Evaluation.
+Iteration 8: Rewards Layer.
 
-Extract pure stat/complex rule orchestration, proof/result types, and progress helpers into `achievements/engine.py`; add Blender smoke coverage for compositor/render-pass complex checks that previously emitted `[Achievements] complex step check error` markers.
+Extract pure reward manifest, verifier, asset-existence cache, importer/action planning, and manager decisions while preserving Blender material, mesh, and geo node fallback behavior and reward claim persistence.
 
 ## Changed Files
 
 - `README.md`
 - `__init__.py`
-- `achievements/engine.py`
+- `achievements/rewards.py`
 - `achievements_v01 (4).py`
 - `docs/agent/architecture.md`
 - `docs/agent/frozen-application-contract.md`
-- `docs/agent/quality-tooling.md`
+- `docs/agent/packaging-release.md`
 - `docs/agent/verification.md`
 - `docs/handoff/current.md`
 - `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`
-- `scripts/run_blender_smoke.py`
 - `scripts/verify_codex_plugin.py`
-- `tests/blender/smoke_engine.py`
-- `tests/test_engine.py`
+- `tests/blender/smoke_rewards.py`
+- `tests/test_rewards.py`
 - `tests/test_infra_scripts.py`
 
 ## Done
 
-- Added `achievements/engine.py` as a pure helper module with no `bpy`, no user-data path access, and no import-time Blender side effects.
-- Added `StepProof`, `RuleEvaluation`, and `AchievementProgress` DTOs for proof/result and progress interfaces.
-- Added stat threshold evaluation, clamped stat progress bars, complex-step proof aggregation, complex progress, pending stat unlock selection, pending complex unlock selection, and streak checking.
-- Root stat achievement checks now delegate pending stat unlock selection to `achievements/engine.py`.
-- Root `_check_complex()` now delegates complex-step aggregation to `achievements/engine.py` while keeping Blender scene predicates in `_check_complex_step()`.
-- Fixed compositor and render-pass complex checks so they no longer emit `[Achievements] complex step check error` on Blender 5.1 default scenes.
-- Added `tests/test_engine.py` for pure unit coverage of stat evaluation, complex evaluation, progress, pending unlock filters, and streak validation.
-- Added `tests/blender/smoke_engine.py` and wired `uv run python scripts/run_blender_smoke.py --suite engine`.
-- `uv run python scripts/run_blender_smoke.py --suite rewards` now passes without the previous compositor/render-pass error markers.
-- README, architecture, frozen contract, verification docs, quality tooling docs, verifier registry, roadmap, and handoff were updated for Iteration 7.
+- Added `achievements/rewards.py` as a pure helper module with no `bpy`, no user-data path access, and no import-time Blender side effects.
+- Added `RewardSpec`, `RewardAction`, `RewardResult`, `RewardManifest`, `RewardVerifier`, `AssetCache`, and `RewardManager`.
+- Moved reward manifest, verifier, cache, importer/action planner, and manager decisions into the rewards module.
+- Root `ACH_OT_ApplyReward` now delegates access checks, unlock-hash verification, asset path resolution, cache-backed asset existence, tutorial/no-reward handling, and fallback planning to `achievements/rewards.py`.
+- Root `ACH_OT_ApplyReward` remains the Blender adapter for actual `.blend` linking, placeholder material creation, placeholder mesh creation, placeholder geo node modifier creation, reporting, saving, and `stats.rewards_claimed`.
+- Preserved material, mesh, and geo node fallback behavior for missing `.blend` assets.
+- Preserved legacy late-asset behavior by caching only existing asset paths; missing assets are rechecked on later claims.
+- Strengthened `tests/blender/smoke_rewards.py` to verify reward claim persistence in runtime stats, JSON, and `load_data()`.
+- Recorded asset licensing policy: bundled reward `.blend` assets remain release-blocked until licenses are explicitly approved.
+- The asset licensing policy remains release-blocked until reward `.blend` asset licenses are explicitly approved.
+- README, architecture, frozen contract, verification docs, packaging/release docs, verifier registry, roadmap, and handoff were updated for Iteration 8.
 - Kept `__init__.py` and `achievements_v01 (4).py` byte-identical after root runtime edits.
 
 ## Remaining
 
-- Start Iteration 8: Rewards Layer.
-- Extract reward manifest, verifier, cache, importer, and manager modules.
-- Preserve fallback behavior for missing material, mesh, and geo node `.blend` assets.
-- Record asset licensing decisions before bundling release assets.
-- Keep normal unit tests free of `bpy`; Blender reward import behavior belongs in smoke/fixtures.
+- Start Iteration 9: UI Split And Visual QA.
+- Split Scene properties, operators, popup tabs/cards, notifications, and pinned overlay into UI modules.
+- Preserve tabs `Задания / Выполнено / Уроки / Хранилище`, card layout contracts, pinned overlay, notifications, pagination, storage grouping, and long text behavior.
+- Run screenshot-based visual QA for header button, popup layout, pinned overlay, notifications, and long text.
 - Keep `__init__.py` and `achievements_v01 (4).py` byte-identical for root runtime edits.
 
 ## Verification
 
-- Baseline before Iteration 7 changes:
+- Baseline before Iteration 8 changes:
   - `uv run python scripts/verify_frozen.py` passed: `35/35 PASS`.
-  - `uv run python scripts/verify_codex_plugin.py` passed: `87/87 PASS`.
+  - `uv run python scripts/verify_codex_plugin.py` passed: `88/88 PASS`.
   - `uv run ruff check .` passed.
-  - `uv run pytest` passed: `19 passed`.
+  - `uv run pytest` passed: `25 passed`.
 - RED checks:
-  - `uv run pytest tests/test_engine.py` failed before implementation because `achievements/engine.py` did not exist.
-  - `uv run python scripts/run_blender_smoke.py --suite engine` failed before implementation because compositor/render-pass checks emitted `[Achievements] complex step check error`.
+  - `uv run pytest tests/test_rewards.py` failed before implementation because `achievements/rewards.py` did not exist.
+  - `uv run pytest tests/test_rewards.py::test_asset_cache_rechecks_missing_assets_so_late_files_can_link` failed before cache refinement because missing asset paths were cached as misses.
 - Targeted GREEN checks:
-  - `uv run pytest tests/test_engine.py` passed: `5 passed`.
-  - `uv run python scripts/run_blender_smoke.py --suite engine` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite rewards` passed without compositor/render-pass complex step error markers.
+  - `uv run pytest tests/test_rewards.py` passed: `5 passed`.
+  - `uv run python scripts/run_blender_smoke.py --suite rewards` passed with material, mesh, geo fallback, and claim persistence checks.
 - Final gate:
-  - `uv run python scripts/verify_frozen.py` passed.
-  - `uv run python scripts/verify_codex_plugin.py` passed.
+  - `uv run python scripts/verify_frozen.py` passed: `35/35 PASS`.
+  - `uv run python scripts/verify_codex_plugin.py` passed: `89/89 PASS`.
   - `uv run ruff check .` passed.
   - `uv run pytest` passed.
   - `uv run python scripts/run_blender_smoke.py --suite register` passed.
@@ -71,13 +69,13 @@ Extract pure stat/complex rule orchestration, proof/result types, and progress h
   - `uv run python scripts/run_blender_smoke.py --suite persistence` passed.
   - `uv run python scripts/run_blender_smoke.py --suite engine` passed.
   - `uv run python scripts/run_blender_smoke.py --suite rewards` passed.
-- Blender smoke suites `engine` and `rewards` passed without complex step error markers.
+- Blender smoke suite `rewards` passed with fallback and claim persistence checks.
 
 ## Agents And Review
 
-- `engine_rule_mapper`/Heisenberg audited the current WIP, confirmed the pure engine API shape, identified the duplicate contract as the primary risk, and recommended keeping Blender scene predicates in root for now.
-- `verification_reviewer`/Ptolemy found one P1 handoff finalization issue: stale pending review status and stale final-gate wording. The handoff was updated before final gates.
-- Final `/review` fallback status: PASS. Requirements match Iteration 7, duplicate contract is restored, engine/rewards smoke no longer emit the targeted error markers, and residual risks are listed below.
+- `reward_layer_mapper`/Einstein audited the current reward flow and provided extraction risks and test recommendations.
+- `verification_reviewer`/Galileo reviewed the staged Iteration 8 diff, found no reward-layer code blocker, and flagged the stale pending review line that was corrected before final gates.
+- Final `/review` fallback status: PASS. Requirements match Iteration 8, duplicate contract is restored, the rewards module is pure, late-added assets are rechecked after missing-asset fallbacks, rewards smoke preserves fallback and claim persistence behavior, and residual risks are listed below.
 
 ## Blockers
 
@@ -85,12 +83,12 @@ None.
 
 ## Residual Risks
 
-- Blender-specific scene predicates still live in root `_check_complex_step()`; Iteration 7 extracts orchestration and progress/proof interfaces, not every Blender predicate.
-- UI card and pinned overlay still compute some progress display details in root UI code; the pure engine progress interface is available for the future UI split.
-- `check_complex_achievements()` still owns unlock side effects in root runtime; this preserves notification/save behavior while `_check_complex()` delegates all-step evaluation to the engine.
+- Actual Blender `.blend` library loading and placeholder creation still live in root `ACH_OT_ApplyReward` adapter; the pure rewards module plans actions but does not import `bpy`.
+- Existing asset paths are cached per process; missing assets are rechecked on later claims, but deleted assets after a positive cache hit may need a future explicit invalidation hook.
+- Bundled reward assets remain release-blocked until asset licenses are approved; missing-asset fallbacks are still the intentional default.
 - Current root source still contains old user-facing "100 achievements" runtime strings and `bl_info["blender"] == (4, 5, 0)`; these remain known frozen drift.
 - No production cloud/backend work has started; Cloud remains a future stub iteration.
 
 ## Next Start Prompt
 
-Continue from Iteration 8: Rewards Layer. Read `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`, `docs/handoff/current.md`, `docs/agent/frozen-application-contract.md`, and `docs/agent/frozen-decisions.md`. Do not touch real `~/BlenderAchievements` data. Start with failing tests for reward manifest/verifier/cache/importer/manager behavior, preserve material/mesh/geo node fallback behavior, and keep asset licensing decisions explicit before bundling release assets. Keep normal unit tests free of `bpy`, use temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` for Blender smoke, and keep `__init__.py` plus `achievements_v01 (4).py` byte-identical for root runtime edits.
+Continue from Iteration 9: UI Split And Visual QA. Read `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`, `docs/handoff/current.md`, `docs/agent/frozen-application-contract.md`, and `docs/agent/frozen-decisions.md`. Do not touch real `~/BlenderAchievements` data. Start with UI split tests and screenshot-based visual QA planning for header button, popup tabs/cards, pinned overlay, notifications, and long text. Preserve the existing tabs `Задания / Выполнено / Уроки / Хранилище`, layout contracts, reward storage grouping, and byte-identical duplicate contract.
