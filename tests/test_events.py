@@ -80,3 +80,48 @@ def test_reset_tracking_helpers_clear_runtime_snapshots():
     events.reset_speed_model_tracking(stats, now=700.0)
     assert stats._speed_model_start == 700.0
     assert stats._speed_model_verts == 128
+
+
+def test_reset_progress_clears_counters_unlocks_and_runtime_state():
+    from achievements import events
+    from achievements.persistence import STAT_FIELDS
+
+    # Seed every canonical stat counter (cross-checked against the persistence
+    # source of truth, so a future counter added there but missed by
+    # reset_progress is caught) plus runtime/session state, all non-zero.
+    counters = {field: 100 + index for index, field in enumerate(STAT_FIELDS)}
+    stats = make_stats(
+        **counters,
+        _last_activity=100.0,
+        _session_date="2026-06-13",
+        _speed_model_verts=512,
+        daily_sessions=["2026-06-01", "2026-06-02"],
+        unlocked={"first_vertex", "first_render"},
+        unlock_hashes={"first_vertex": "abc123", "first_render": "def456"},
+        rewards_claimed={"first_render"},
+        pinned_ach_id="first_vertex",
+    )
+
+    events.reset_progress(stats, now=900.0)
+
+    for field in STAT_FIELDS:
+        assert getattr(stats, field) == 0, field
+    assert stats.unlocked == set()
+    assert stats.unlock_hashes == {}
+    assert stats.rewards_claimed == set()
+    assert stats.pinned_ach_id == ""
+    assert stats.daily_sessions == []
+    assert stats._session_date == ""
+
+    # Runtime snapshots and session/speed windows are rebased to the clean state.
+    assert stats._prev_verts == {}
+    assert stats._prev_edges == {}
+    assert stats._prev_faces == {}
+    assert stats._prev_mats == set()
+    assert stats._session_start == 900.0
+    assert stats._last_activity == 900.0
+    assert stats._time_at_session_start == 0
+    assert stats._speed_model_start == 900.0
+    # _speed_model_verts was seeded to 512 and must be rebased to the now-zero
+    # vertices_created, proving reset_speed_model_tracking actually ran.
+    assert stats._speed_model_verts == 0

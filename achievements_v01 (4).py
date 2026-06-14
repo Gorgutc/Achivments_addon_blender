@@ -1831,6 +1831,34 @@ def _draw_grid_page(layout, items, scn, tab_key, draw_func):
 
 
 # =============================================
+#  RESET PROGRESS (testing/dev)
+# =============================================
+class ACH_OT_ResetAchievements(bpy.types.Operator):
+    """Полный сброс прогресса достижений (для тестирования)."""
+    bl_idname = "ach.reset_achievements"
+    bl_label = "Сбросить прогресс"
+    bl_description = "Полный сброс: достижения, награды, статистика, XP, стрики"
+    bl_options = {'INTERNAL'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=360)
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.label(text="Сбросить весь прогресс?", icon='ERROR')
+        col.label(text="Обнулятся достижения, награды, статистика и XP.")
+        col.label(text="Действие необратимо.")
+
+    def execute(self, context):
+        ach_events.reset_progress(stats, now=time.time())
+        _pending_notifications.clear()
+        save_data()
+        _tag_redraw_all()
+        self.report({'INFO'}, "Прогресс достижений сброшен")
+        return {'FINISHED'}
+
+
+# =============================================
 #  MAIN DIALOG
 # =============================================
 class ACH_OT_AchievementsDialog(bpy.types.Operator):
@@ -1877,6 +1905,10 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
             xp_box.label(text=f"{bar_str} {lvl_current}/{lvl_range}")
         else:
             xp_box.label(text="MAX")
+
+        # Reset progress (testing/dev) — confirmation handled by the operator
+        reset_row = sbox.row(align=True)
+        reset_row.operator("ach.reset_achievements", text="Сбросить прогресс", icon="TRASH")
 
         # Tab buttons
         row = layout.row(align=True)
@@ -2006,6 +2038,7 @@ _classes = (
     ACH_OT_PinAchievement,
     ACH_OT_PagePrev,
     ACH_OT_PageNext,
+    ACH_OT_ResetAchievements,
     ACH_OT_AchievementsDialog,
 )
 
