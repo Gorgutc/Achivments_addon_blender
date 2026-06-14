@@ -435,5 +435,5 @@ grep -n 'step_check ==' __init__.py
 - Иконки — заглушки (без реальных PNG файлов, используется FUND)
 - URL уроков — заглушки (placeholder YouTube ссылки)
 - .blend файлы наград — не включены (создаётся заглушка при отсутствии)
-- Нет кнопки «Сбросить достижения» (по требованию)
+- Кнопка «Сбросить прогресс» в блоке статистики окна достижений (с подтверждением) — полный сброс профиля для тестирования условий получения наград
 - Cloud sync is a disabled offline stub only: no production backend, no normal-use network calls, and no pinned overlay state sync by default.

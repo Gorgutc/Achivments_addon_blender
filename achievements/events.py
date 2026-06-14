@@ -60,3 +60,38 @@ def reset_speed_model_tracking(stats: Any, *, now: float) -> None:
     """Reset speed-modeler debounce window to the current vertex count."""
     stats._speed_model_start = now
     stats._speed_model_verts = stats.vertices_created
+
+
+def reset_progress(stats: Any, *, now: float) -> None:
+    """Reset all achievement progress to a clean profile (testing/dev reset).
+
+    Zeroes every persisted stat counter, clears unlock/reward/pin/streak state,
+    then resets runtime snapshots and the session/speed-modeler windows so the
+    next activity accumulates from a fresh baseline.
+
+    Note: this clears ``daily_sessions``/``_session_date`` to the empty state,
+    but a later ``save_data`` flush re-records *today* as an active session
+    (exactly like a brand-new profile's first save), so the persisted streak
+    list becomes ``[today]`` rather than staying empty. A single day cannot
+    satisfy any streak achievement, so this is the intended fresh-session state.
+    """
+    for field in (
+        "vertices_created",
+        "vertices_deleted",
+        "edges_created",
+        "faces_created",
+        "meshes_1000plus",
+        "materials_applied",
+        "time_spent",
+        "renders_completed",
+    ):
+        setattr(stats, field, 0)
+    stats.unlocked = set()
+    stats.unlock_hashes = {}
+    stats.rewards_claimed = set()
+    stats.pinned_ach_id = ""
+    stats.daily_sessions = []
+    stats._session_date = ""
+    reset_scene_snapshots(stats)
+    reset_session_tracking(stats, now=now)
+    reset_speed_model_tracking(stats, now=now)

@@ -131,6 +131,7 @@ Global layout:
 - Popup width is derived from `GRID_COLS * _CARD_W * _UNIT + 80`.
 - Popup width, tab specs, pagination plans, Scene property specs, overlay frame geometry, storage filters, and reward labels are planned by pure `achievements/ui.py`; root `__init__.py` remains the Blender layout/GPU adapter.
 - Grid is 2 columns by 5 rows, 10 cards per page.
+- The stats box exposes a `Сбросить прогресс` button (`ach.reset_achievements`) that fully resets the profile after a confirmation dialog; this is an explicit testing/dev affordance.
 - Cards are horizontal: icon on the left, text and actions on the right.
 - Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
 - Card width is `_CARD_W = 15.6`.
@@ -190,7 +191,7 @@ Do not replace GPU overlay behavior with panel-only UI unless explicitly request
 ## Runtime Lifecycle
 
 Registration registers:
-- Seven operator classes.
+- Eight operator classes.
 - `bpy.types.Scene` tab/page/accordion properties.
 - `depsgraph_update_post`, `load_post`, `save_pre`, and `render_complete` handlers.
 - `_timer_tick` and `_notification_redraw_tick` timers.
@@ -252,6 +253,7 @@ Operators:
 - `ACH_OT_PinAchievement`
 - `ACH_OT_PagePrev`
 - `ACH_OT_PageNext`
+- `ACH_OT_ResetAchievements`
 - `ACH_OT_AchievementsDialog`
 
 UI helpers:

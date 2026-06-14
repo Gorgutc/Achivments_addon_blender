@@ -139,6 +139,7 @@ FROZEN_CLASSES = {
     "ACH_OT_PageNext",
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
+    "ACH_OT_ResetAchievements",
     "Stats",
 }
 FROZEN_REGISTER_CLASSES = {
@@ -149,6 +150,7 @@ FROZEN_REGISTER_CLASSES = {
     "ACH_OT_PageNext",
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
+    "ACH_OT_ResetAchievements",
 }
 ACHIEVEMENT_FIELDS = {
     "id",
