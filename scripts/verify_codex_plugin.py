@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,7 @@ REQUIRED_DOCS = [
     "docs/agent/packaging-release.md",
     "docs/agent/archive-policy.md",
     "docs/agent/adrs/0001-codex-infra-port.md",
+    "docs/agent/adrs/0002-retire-legacy-runtime-duplicate.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
@@ -66,13 +68,23 @@ REQUIRED_INFRA_FILES = [
     ".agents/plugins/marketplace.json",
     ".codex/config.toml",
     ".codex/hooks.json",
+    "LICENSE",
     "achievements/__init__.py",
     "achievements/catalog.py",
     "achievements/engine.py",
     "achievements/events.py",
+    "achievements/integrity.py",
     "achievements/lifecycle.py",
     "achievements/metadata.py",
     "achievements/persistence.py",
+    "achievements/predicates/__init__.py",
+    "achievements/predicates/geometry_nodes.py",
+    "achievements/predicates/material.py",
+    "achievements/predicates/object_modifier.py",
+    "achievements/predicates/registry.py",
+    "achievements/predicates/render.py",
+    "achievements/predicates/time_state.py",
+    "achievements/predicates/types.py",
     "achievements/rewards.py",
     "achievements/sync.py",
     "achievements/ui.py",
@@ -83,8 +95,11 @@ REQUIRED_INFRA_FILES = [
     "scripts/run_blender_smoke.py",
     "scripts/verify_codex_plugin.py",
     "scripts/verify_frozen.py",
+    "scripts/verify_predicates.py",
     "tests/test_catalog.py",
     "tests/test_infra_scripts.py",
+    "tests/test_integrity.py",
+    "tests/test_predicates.py",
     "tests/test_release_packaging.py",
     "tests/test_engine.py",
     "tests/test_events.py",
@@ -98,6 +113,7 @@ REQUIRED_INFRA_FILES = [
     "tests/blender/smoke_persistence.py",
     "tests/blender/smoke_rewards.py",
     "tests/blender/smoke_ui_visual.py",
+    "docs/archive/achievements_100_list.md",
 ]
 FORBIDDEN_ACTIVE_TERMS = [
     "Next.js",
@@ -223,7 +239,7 @@ def verify_docs() -> None:
     record("active instructions avoid stale web-stack rules", not stale, ", ".join(stale[:8]))
 
 
-def verify_extension_draft() -> None:
+def verify_extension_contract() -> None:
     manifest = ROOT / "blender_manifest.toml"
     release_builder = ROOT / "scripts" / "build_extension.py"
     package_init = ROOT / "achievements" / "__init__.py"
@@ -232,11 +248,13 @@ def verify_extension_draft() -> None:
     events = ROOT / "achievements" / "events.py"
     lifecycle = ROOT / "achievements" / "lifecycle.py"
     persistence = ROOT / "achievements" / "persistence.py"
+    integrity = ROOT / "achievements" / "integrity.py"
+    predicates = ROOT / "achievements" / "predicates"
     rewards = ROOT / "achievements" / "rewards.py"
     sync = ROOT / "achievements" / "sync.py"
     ui = ROOT / "achievements" / "ui.py"
     package_metadata = ROOT / "achievements" / "metadata.py"
-    record("extension draft exists: blender_manifest.toml", manifest.is_file())
+    record("extension manifest exists: blender_manifest.toml", manifest.is_file())
     record("release builder exists: scripts/build_extension.py", release_builder.is_file())
     record("package skeleton exists: achievements/__init__.py", package_init.is_file())
     record("catalog module exists: achievements/catalog.py", catalog.is_file())
@@ -244,10 +262,26 @@ def verify_extension_draft() -> None:
     record("event helpers exist: achievements/events.py", events.is_file())
     record("lifecycle helpers exist: achievements/lifecycle.py", lifecycle.is_file())
     record("persistence helpers exist: achievements/persistence.py", persistence.is_file())
+    record("integrity helpers exist: achievements/integrity.py", integrity.is_file())
+    record("predicate registry exists: achievements/predicates", predicates.is_dir())
     record("rewards helpers exist: achievements/rewards.py", rewards.is_file())
     record("sync helpers exist: achievements/sync.py", sync.is_file())
     record("ui helpers exist: achievements/ui.py", ui.is_file())
     record("package metadata exists: achievements/metadata.py", package_metadata.is_file())
+    license_file = ROOT / "LICENSE"
+    record("GPL-3.0-or-later license exists: LICENSE", license_file.is_file())
+    if manifest.is_file():
+        manifest_data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        record("extension version is 0.2.0", manifest_data.get("version") == "0.2.0")
+        record("extension minimum Blender is 5.0.0", manifest_data.get("blender_version_min") == "5.0.0")
+        record(
+            "extension manifest declares GPL-3.0-or-later",
+            manifest_data.get("license") == ["SPDX:GPL-3.0-or-later"],
+        )
+    if release_builder.is_file():
+        builder_text = release_builder.read_text(encoding="utf-8")
+        record("release builder supports committed revision mode", "--revision" in builder_text)
+        record("release builder includes LICENSE", 'Path("LICENSE")' in builder_text)
 
 
 def verify_tracked_required_files() -> None:
@@ -274,7 +308,7 @@ def main() -> int:
     verify_skills()
     verify_codex_mirror()
     verify_docs()
-    verify_extension_draft()
+    verify_extension_contract()
     verify_tracked_required_files()
     passed = sum(1 for _name, ok, _detail in checks if ok)
     failed = len(checks) - passed

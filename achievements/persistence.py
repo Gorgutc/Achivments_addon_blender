@@ -120,7 +120,8 @@ def state_from_payload(raw: Any, *, make_unlock_hash) -> tuple[PersistenceState,
         )
 
     stats_payload = {field: 0 for field in STAT_FIELDS}
-    migrated = raw.get("schema_version") != SCHEMA_VERSION
+    is_legacy_payload = raw.get("schema_version") != SCHEMA_VERSION
+    migrated = is_legacy_payload
     raw_stats = raw.get("stats", {})
     if not isinstance(raw_stats, dict):
         raw_stats = {}
@@ -138,7 +139,7 @@ def state_from_payload(raw: Any, *, make_unlock_hash) -> tuple[PersistenceState,
     unlock_hashes = _as_str_dict(raw.get("unlock_hashes", {}))
 
     for achievement_id in unlocked:
-        if achievement_id not in unlock_hashes:
+        if is_legacy_payload and achievement_id not in unlock_hashes:
             unlock_hashes[achievement_id] = make_unlock_hash(achievement_id)
             migrated = True
 

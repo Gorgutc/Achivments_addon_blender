@@ -243,6 +243,12 @@ def prepare_release_source(
     }
 
     source_dir = ensure_generated_subdir(source_dir, generated_root=generated_root)
+    if not clean and source_dir.exists():
+        existing = set(_source_tree_paths(source_dir))
+        unexpected = sorted(existing - set(payload), key=lambda path: path.as_posix())
+        if unexpected:
+            details = ", ".join(path.as_posix() for path in unexpected)
+            raise ValueError(f"Prepared source contains unexpected files: {details}")
     if clean and source_dir.exists():
         shutil.rmtree(source_dir)
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -313,6 +319,10 @@ def extension_archive_member_digests(
             unix_mode = (member.external_attr >> 16) & 0xFFFF
             if unix_mode and stat.S_ISLNK(unix_mode):
                 raise ValueError(f"Symlink is not allowed in extension archive: {name}")
+            if stat.S_IFMT(unix_mode) and not stat.S_ISREG(unix_mode):
+                raise ValueError(
+                    f"Non-regular file is not allowed in extension archive: {name}"
+                )
             member_data[relative_path] = archive.read(member)
 
     actual_set = set(member_data)

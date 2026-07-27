@@ -318,13 +318,15 @@ def test_prepare_release_source_rejects_stale_unexpected_output(tmp_path):
     source_dir.mkdir(parents=True)
     (source_dir / "unexpected.txt").write_text("stale\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Prepared source payload mismatch"):
+    with pytest.raises(ValueError, match="Prepared source contains unexpected files"):
         build_extension.prepare_release_source(
             root,
             source_dir,
             clean=False,
             generated_root=generated_root,
         )
+    assert (source_dir / "unexpected.txt").read_text(encoding="utf-8") == "stale\n"
+    assert not (source_dir / "__init__.py").exists()
 
 
 def test_archive_member_digests_are_repeatable_across_zip_metadata(tmp_path):
@@ -401,6 +403,24 @@ def test_archive_rejects_symlink_members(tmp_path):
         archive.writestr(symlink, b"target.py")
 
     with pytest.raises(ValueError, match="Symlink is not allowed"):
+        build_extension.extension_archive_member_digests(archive_path, expected)
+
+
+def test_archive_rejects_non_regular_members(tmp_path):
+    build_extension = load_build_extension_module()
+    expected = minimal_archive_payload()
+    archive_path = tmp_path / "fifo.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for path, data in expected.items():
+            if path != Path("__init__.py"):
+                archive.writestr(path.as_posix(), data)
+                continue
+            fifo = zipfile.ZipInfo(path.as_posix())
+            fifo.create_system = 3
+            fifo.external_attr = (stat.S_IFIFO | 0o644) << 16
+            archive.writestr(fifo, data)
+
+    with pytest.raises(ValueError, match="Non-regular file is not allowed"):
         build_extension.extension_archive_member_digests(archive_path, expected)
 
 

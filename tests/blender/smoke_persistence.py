@@ -87,6 +87,27 @@ def main() -> None:
         if module.stats.vertices_created != 12 or "first_vertex" not in module.stats.unlocked:
             fail("load_data did not restore saved values")
 
+        current_missing = dict(data)
+        current_missing["unlocked"] = ["first_vertex"]
+        current_missing["unlock_hashes"] = {}
+        data_path.write_text(json.dumps(current_missing, indent=2), encoding="utf-8")
+        module.stats.unlock_hashes = {"first_vertex": "must-be-cleared"}
+        module.load_data()
+        if "first_vertex" in module.stats.unlock_hashes:
+            fail("current-schema missing unlock hash was repaired")
+        if module._verify_unlock("first_vertex", module.stats.unlock_hashes.get("first_vertex", "")):
+            fail("current-schema missing unlock hash verified")
+
+        current_forged = dict(data)
+        current_forged["unlocked"] = ["first_vertex"]
+        current_forged["unlock_hashes"] = {"first_vertex": "forged"}
+        data_path.write_text(json.dumps(current_forged, indent=2), encoding="utf-8")
+        module.load_data()
+        if module.stats.unlock_hashes.get("first_vertex") != "forged":
+            fail("current-schema forged unlock hash was rewritten")
+        if module._verify_unlock("first_vertex", module.stats.unlock_hashes["first_vertex"]):
+            fail("current-schema forged unlock hash verified")
+
         data.pop("schema_version", None)
         data["unlock_hashes"] = {}
         data_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -114,7 +135,10 @@ def main() -> None:
     finally:
         module.unregister()
 
-    print("[smoke_persistence:PASS] JSON schema, load, save, migration, and corrupt recovery clean")
+    print(
+        "[smoke_persistence:PASS] JSON schema, integrity policy, load, save, "
+        "legacy migration, and corrupt recovery clean"
+    )
 
 
 if __name__ == "__main__":

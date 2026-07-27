@@ -1,13 +1,13 @@
 # Frozen Decisions
 
-Frozen for preparation work:
-- Do not edit `__init__.py`.
-- Do not edit `achievements_v01 (4).py`.
+Frozen after the user-approved Achievements 0.2.0 technical closeout:
+- Root `__init__.py` remains the only canonical Blender runtime entrypoint.
+- `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact recovery evidence.
 - Treat 105 achievements and 9 lessons as the current code truth.
 - Treat `docs/agent/frozen-application-contract.md` as the active frozen map for current rules, design, functions, data surfaces, and future change boundaries.
-- Treat `achievements_v01 (4).py` as a permanent byte-identical duplicate and known drift risk unless the user explicitly changes that policy in a later task.
-- Treat `bl_info["blender"] == (4, 5, 0)` as known drift against the future Blender 5.0+ policy.
-- Treat old 100-achievement text as known documentation/code text drift.
+- Require `bl_info["blender"] == (5, 0, 0)` and add-on version `0.2.0`.
+- Treat 105-achievement runtime and active documentation text as current truth.
+- Keep `SCHEMA_VERSION == "1.0.0"`; only legacy payloads may backfill missing unlock hashes.
 - Do not copy Node/npm/pnpm package-manager workflows or web checks from sibling repositories; Python `uv` tooling is allowed here.
 - Do not touch real user progress data.
 

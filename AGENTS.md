@@ -21,9 +21,11 @@ Core rules:
 
 Known frozen facts:
 - Canonical active add-on file is `__init__.py`.
-- `achievements_v01 (4).py` is currently a byte-identical duplicate and is tracked as a drift risk.
+- `achievements_v01 (4).py` was retired in the approved 0.2.0 technical closeout; ADR 0002 preserves its baseline blob, hashes, and recovery procedure. Do not reintroduce a second runtime without an explicit owner decision.
 - The add-on currently defines 105 achievements, 9 lessons, JSON persistence under `~/BlenderAchievements/`, handlers, timers, GPU draw UI, and reward loading from `.blend` assets.
-- Current `bl_info["blender"] == (4, 5, 0)` is known policy drift for later add-on-code work.
+- Current add-on identity is 0.2.0 and `bl_info["blender"] == (5, 0, 0)`.
+- Complex predicates live in pure `achievements/predicates/`; root `_check_complex_step` remains the Blender adapter.
+- Unlock hashes are local integrity markers. Current-schema missing or malformed markers must fail closed and must not be backfilled.
 
 Required delivery gate:
 1. Run the relevant static verifier commands.

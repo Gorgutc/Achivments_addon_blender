@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Achievements",
     "author": "axximus",
-    "version": (0, 1, 0),
-    "blender": (4, 5, 0),
+    "version": (0, 2, 0),
+    "blender": (5, 0, 0),
     "location": "3D Viewport > Header (trophy icon)",
-    "description": "Gamification addon: 100 achievements, XP & levels, rewards, tutorials",
+    "description": "Gamification addon: 105 achievements, XP & levels, rewards, tutorials",
     "category": "Interface",
 }
 
@@ -12,20 +12,20 @@ import bpy
 import os
 import sys
 import time
-import math
+import hashlib
+from contextlib import suppress
 import bmesh
 import gpu
 import blf
-import hashlib
 from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
 
 # ============================================================
-#  ACHIEVEMENTS ADDON — v0.1 (pre-release)
-#  Blender 4.5 / 5.0 / 5.1
+#  ACHIEVEMENTS ADDON — v0.2 (release candidate)
+#  Blender 5.0 / 5.1 / 5.2
 #
-#  v0.1:
-#  - 100 achievements across 5 categories
+#  v0.2:
+#  - 105 achievements across 5 categories
 #  - XP & Level system (10 levels)
 #  - Difficulty labels (easy/medium/hard) on cards
 #  - Multi-step progress for complex achievements
@@ -46,7 +46,6 @@ from gpu_extras.batch import batch_for_shader
 DATA_DIR = os.path.join(os.path.expanduser("~"), "BlenderAchievements")
 DATA_FILE = os.path.join(DATA_DIR, "achievements_data.json")
 ICONS_DIR = os.path.join(DATA_DIR, "textures")
-REWARDS_DIR = os.path.join(DATA_DIR, "rewards")
 
 
 # =============================================
@@ -83,23 +82,14 @@ PIN_MARGIN_Y = NOTIFY_MARGIN
 # =============================================
 #  REWARD PROTECTION
 # =============================================
-# Secret salt for hash-based unlock verification.
-# Rewards can only be applied if the achievement's unlock hash matches.
-# This prevents manual JSON editing to claim rewards without earning them.
-# NOTE: For stronger protection, obfuscate this salt or derive it
-# from machine-specific data (e.g., os.getlogin() + platform.node()).
-_REWARD_SALT = "BlenderAch2026_"
-
-
 def _make_unlock_hash(ach_id):
-    """Generate a verification hash for an unlocked achievement."""
-    raw = f"{_REWARD_SALT}{ach_id}{os.getlogin()}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+    """Generate the legacy-compatible local integrity marker."""
+    return ach_integrity.make_unlock_hash(ach_id, os.getlogin())
 
 
 def _verify_unlock(ach_id, stored_hash):
-    """Verify that an achievement was legitimately unlocked."""
-    return _make_unlock_hash(ach_id) == stored_hash
+    """Verify the local marker without repairing persisted state."""
+    return ach_integrity.verify_unlock_hash(ach_id, stored_hash, os.getlogin())
 
 
 # =============================================
@@ -118,8 +108,10 @@ from achievements.catalog import (
 )
 from achievements import engine as ach_engine
 from achievements import events as ach_events
+from achievements import integrity as ach_integrity
 from achievements import lifecycle as ach_lifecycle
 from achievements import persistence as ach_persistence
+from achievements import predicates as ach_predicates
 from achievements import rewards as ach_rewards
 from achievements import ui as ach_ui
 
@@ -328,11 +320,6 @@ def _reward_type_label(rtype):
     return ach_ui.reward_type_label(rtype)
 
 
-def _ease_out_cubic(t):
-    """Cubic ease-out for smooth slide-in animation."""
-    return ach_ui.ease_out_cubic(t)
-
-
 def _draw_notifications():
     """GPU draw callback: render all pending notification popups."""
     if not _pending_notifications:
@@ -508,726 +495,35 @@ def _unlock_achievement(aid, ach):
 #  COMPLEX ACHIEVEMENT CHECKING (scene state)
 # =============================================
 
-def _check_streak(daily_sessions, required_days):
-    """Check if there's a consecutive streak of required_days in daily_sessions list."""
-    return ach_engine.has_streak(daily_sessions, required_days)
-
-
 def _check_complex_step(complex_id, step_check, scene):
-    """Check a single step of a complex achievement. Returns True/False.
-    Used both for progress display and for completion check.
+    """Evaluate one complex step through the pure predicate registry."""
+    import datetime
 
-    HOW TO ADD A NEW COMPLEX CHECK:
-    1. Add a new elif clause for the complex_id
-    2. Inside, handle each step_check string used in the achievement's 'steps' list
-    3. Use scene.objects, bpy.data, etc. to inspect current Blender state
-    4. Return True if the condition is met, False otherwise
-    """
     try:
-        # -------------------------------------------------------
-        # HELPER: scan all GeoNodes trees across the scene
-        # -------------------------------------------------------
-        def _gn_trees():
-            """Yield all Geometry Nodes node_groups in the scene."""
-            for obj in scene.objects:
-                if obj.type != 'MESH':
-                    continue
-                for mod in obj.modifiers:
-                    if mod.type == 'NODES' and mod.node_group:
-                        yield mod.node_group
+        context = ach_predicates.PredicateContext(
+            scene=scene,
+            data=bpy.data,
+            view_layer=getattr(bpy.context, "view_layer", None),
+            stats=ach_predicates.StatsSnapshot.from_runtime(stats),
+            clock=ach_predicates.ClockSnapshot(
+                now=datetime.datetime.now(),
+                timestamp=time.time(),
+            ),
+        )
+        result = ach_predicates.evaluate_predicate(complex_id, step_check, context)
+        if result.error:
+            print(
+                f"[Achievements] complex step check error "
+                f"({complex_id}/{step_check}): {result.error}"
+            )
+        if result.speed_model_reset is not None:
+            stats._speed_model_start = result.speed_model_reset.started_at
+            stats._speed_model_verts = result.speed_model_reset.vertices_created
+        return result.matched
+    except Exception as error:
+        print(f"[Achievements] complex step check error ({complex_id}/{step_check}): {error}")
+        return False
 
-        def _gn_has_node(bl_idname):
-            """Check if any GN tree contains a node with given bl_idname."""
-            for ng in _gn_trees():
-                for node in ng.nodes:
-                    if node.bl_idname == bl_idname:
-                        return True
-            return False
-
-        def _gn_has_node_type(type_name):
-            """Check if any GN tree contains a node whose type == type_name."""
-            for ng in _gn_trees():
-                for node in ng.nodes:
-                    if node.type == type_name:
-                        return True
-            return False
-
-        def _gn_has_node_label_or_name(partial_name):
-            """Check by partial name match (case-insensitive)."""
-            partial = partial_name.lower()
-            for ng in _gn_trees():
-                for node in ng.nodes:
-                    if partial in node.name.lower() or partial in node.label.lower() or partial in node.bl_idname.lower():
-                        return True
-            return False
-
-        def _mat_has_node(bl_idname):
-            """Check if any material in the scene has a node with given bl_idname."""
-            for mat in bpy.data.materials:
-                if mat.use_nodes and mat.node_tree:
-                    for node in mat.node_tree.nodes:
-                        if node.bl_idname == bl_idname:
-                            return True
-            return False
-
-        def _mat_has_node_type(type_name):
-            """Check if any material has a node whose type matches."""
-            for mat in bpy.data.materials:
-                if mat.use_nodes and mat.node_tree:
-                    for node in mat.node_tree.nodes:
-                        if node.type == type_name:
-                            return True
-            return False
-
-        # -------------------------------------------------------
-        # ORIGINAL COMPLEX ACHIEVEMENTS (V0.1 base)
-        # -------------------------------------------------------
-        if complex_id == "smooth_cube":
-            if step_check == "has_mesh":
-                return any(o.type == 'MESH' for o in scene.objects)
-            if step_check == "has_subsurf":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SUBSURF' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "sphere_from_cube":
-            if step_check == "has_mesh":
-                return any(o.type == 'MESH' for o in scene.objects)
-            if step_check == "has_subsurf":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SUBSURF' for m in obj.modifiers):
-                        return True
-                return False
-            if step_check == "has_smooth":
-                for obj in scene.objects:
-                    if obj.type != 'MESH':
-                        continue
-                    for m in obj.modifiers:
-                        if m.type == 'SMOOTH':
-                            return True
-                        # Blender 5.0: Smooth by Angle is a Geometry Nodes modifier
-                        if m.type == 'NODES' and m.node_group and 'smooth' in m.node_group.name.lower():
-                            return True
-                return False
-
-        elif complex_id == "first_render":
-            if step_check == "has_mesh":
-                return any(o.type == 'MESH' for o in scene.objects)
-            if step_check == "has_material_on_mesh":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data.materials and obj.data.materials[0]:
-                        return True
-                return False
-            if step_check == "has_light":
-                return any(o.type == 'LIGHT' for o in scene.objects)
-            if step_check == "render_done":
-                return stats.renders_completed > 0
-
-        elif complex_id == "architect":
-            if step_check == "has_collection":
-                return len(bpy.data.collections) > 0
-            if step_check == "has_3_meshes":
-                for coll in bpy.data.collections:
-                    mesh_objs = [o for o in coll.objects if o.type == 'MESH']
-                    if len(mesh_objs) >= 3:
-                        return True
-                return False
-            if step_check == "has_unique_mats":
-                for coll in bpy.data.collections:
-                    mesh_objs = [o for o in coll.objects if o.type == 'MESH']
-                    mats = set()
-                    for obj in mesh_objs:
-                        if obj.data.materials and obj.data.materials[0]:
-                            mats.add(obj.data.materials[0].name)
-                    if len(mats) >= 3:
-                        return True
-                return False
-            if step_check == "has_array":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'ARRAY' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "procedural_master":
-            if step_check == "has_mesh_with_mat":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data.materials and obj.data.materials[0]:
-                        return True
-                return False
-            if step_check == "has_geonodes_mod":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for mod in obj.modifiers:
-                            if mod.type == 'NODES' and mod.node_group:
-                                return True
-                return False
-            if step_check == "has_3_nodes":
-                for obj in scene.objects:
-                    if obj.type != 'MESH':
-                        continue
-                    for mod in obj.modifiers:
-                        if mod.type == 'NODES' and mod.node_group:
-                            ng = mod.node_group
-                            real_nodes = [n for n in ng.nodes
-                                          if n.type not in ('GROUP_INPUT', 'GROUP_OUTPUT',
-                                                            'FRAME', 'REROUTE')]
-                            if len(real_nodes) >= 3:
-                                return True
-                return False
-            if step_check == "has_links":
-                for obj in scene.objects:
-                    if obj.type != 'MESH':
-                        continue
-                    for mod in obj.modifiers:
-                        if mod.type == 'NODES' and mod.node_group:
-                            if len(mod.node_group.links) > 0:
-                                return True
-                return False
-
-        # -------------------------------------------------------
-        # MODIFIER-BASED COMPLEX ACHIEVEMENTS
-        # -------------------------------------------------------
-        elif complex_id == "five_modifier_stack":
-            if step_check == "has_mesh":
-                return any(o.type == 'MESH' for o in scene.objects)
-            if step_check == "five_modifier_stack":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and len(obj.modifiers) >= 5:
-                        return True
-                return False
-
-        elif complex_id == "mirror_subdivision":
-            if step_check == "has_mirror":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'MIRROR' for m in obj.modifiers):
-                        return True
-                return False
-            if step_check == "has_subsurf":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SUBSURF' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "boolean_master":
-            if step_check == "has_boolean":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'BOOLEAN':
-                                return True
-                return False
-
-        elif complex_id == "solidify_bevel_combo":
-            if step_check == "has_solidify":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SOLIDIFY' for m in obj.modifiers):
-                        return True
-                return False
-            if step_check == "has_bevel":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'BEVEL' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "screw_modifier":
-            if step_check == "has_screw":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SCREW' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "ten_modifier_stack":
-            if step_check == "ten_modifier_stack":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and len(obj.modifiers) >= 10:
-                        return True
-                return False
-
-        elif complex_id == "shrinkwrap_use":
-            if step_check == "has_shrinkwrap":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'SHRINKWRAP' and m.target is not None:
-                                return True
-                return False
-
-        elif complex_id == "armature_modifier":
-            if step_check == "has_armature":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'ARMATURE' and m.object is not None:
-                                return True
-                return False
-
-        elif complex_id == "curve_deform":
-            if step_check == "has_curve_mod":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'CURVE' and m.object is not None:
-                                return True
-                return False
-
-        elif complex_id == "skin_modifier":
-            if step_check == "has_skin":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'SKIN' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "weighted_normals":
-            if step_check == "has_weighted_normal":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and any(m.type == 'WEIGHTED_NORMAL' for m in obj.modifiers):
-                        return True
-                return False
-
-        elif complex_id == "array_circle":
-            if step_check == "has_array_with_empty":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'ARRAY' and m.use_object_offset and m.offset_object is not None:
-                                return True
-                return False
-
-        elif complex_id == "multiresolution_sculpt":
-            if step_check == "has_multires":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for m in obj.modifiers:
-                            if m.type == 'MULTIRES' and m.levels > 1:
-                                return True
-                return False
-
-        elif complex_id == "shape_key_animation":
-            if step_check == "has_shape_keys":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data.shape_keys and len(obj.data.shape_keys.key_blocks) >= 2:
-                        return True
-                return False
-            if step_check == "has_shape_key_anim":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data.shape_keys:
-                        sk = obj.data.shape_keys
-                        if sk.animation_data and sk.animation_data.action:
-                            return True
-                return False
-
-        elif complex_id == "retopology_work":
-            if step_check == "has_snap_face":
-                ts = scene.tool_settings
-                # Blender 4.x/5.x: snap_elements is a set
-                try:
-                    if ts.use_snap and 'FACE' in ts.snap_elements:
-                        return True
-                except:
-                    pass
-                return False
-
-        elif complex_id == "particle_system":
-            if step_check == "has_particles":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and len(obj.particle_systems) > 0:
-                        return True
-                # Also check if there's a FORCE_WIND object
-                return False
-
-        elif complex_id == "collection_organizer":
-            if step_check == "has_5_collections":
-                filled = sum(1 for c in bpy.data.collections if len(c.objects) > 0)
-                return filled >= 5
-
-        elif complex_id == "custom_origin":
-            if step_check == "custom_origin_set":
-                # Can only detect indirectly: if any mesh origin is not at world center
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        if obj.location.length > 0.001:
-                            # Check if origin differs from mesh centroid (approximation)
-                            return True
-                return False
-
-        elif complex_id == "linked_duplicate":
-            if step_check == "has_20_linked":
-                # Count objects sharing the same mesh data-block
-                from collections import Counter
-                mesh_users = Counter()
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data:
-                        mesh_users[obj.data.name] += 1
-                return any(count >= 20 for count in mesh_users.values())
-
-        # -------------------------------------------------------
-        # RENDERING COMPLEX ACHIEVEMENTS
-        # -------------------------------------------------------
-        elif complex_id == "ten_lights_scene":
-            if step_check == "has_10_lights":
-                lights = [o for o in scene.objects if o.type == 'LIGHT']
-                return len(lights) >= 10
-
-        elif complex_id == "three_light_setup":
-            if step_check == "has_3_light_types":
-                light_types = set()
-                for obj in scene.objects:
-                    if obj.type == 'LIGHT':
-                        light_types.add(obj.data.type)
-                return len(light_types) >= 3
-
-        elif complex_id == "hdri_lighting":
-            if step_check == "has_hdri":
-                world = scene.world
-                if world and world.use_nodes and world.node_tree:
-                    for node in world.node_tree.nodes:
-                        if node.bl_idname == 'ShaderNodeTexEnvironment':
-                            if node.image is not None:
-                                return True
-                return False
-
-        elif complex_id == "depth_of_field":
-            if step_check == "has_dof":
-                cam = scene.camera
-                if cam and cam.data.dof.use_dof:
-                    if cam.data.dof.focus_object is not None or cam.data.dof.focus_distance > 0:
-                        return True
-                return False
-
-        elif complex_id == "motion_blur_render":
-            if step_check == "has_motion_blur":
-                return scene.render.use_motion_blur
-
-        elif complex_id == "denoiser_render":
-            if step_check == "has_denoiser":
-                if hasattr(scene, 'cycles') and scene.cycles.use_denoising:
-                    return True
-                # EEVEE Next may have its own denoiser setting
-                return False
-
-        elif complex_id == "cycles_caustics":
-            if step_check == "has_caustics":
-                if not hasattr(scene, 'cycles'):
-                    return False
-                cyc = scene.cycles
-                if cyc.caustics_reflective or cyc.caustics_refractive:
-                    # Also check for glass/transmission material
-                    for mat in bpy.data.materials:
-                        if mat.use_nodes and mat.node_tree:
-                            for node in mat.node_tree.nodes:
-                                if node.bl_idname == 'ShaderNodeBsdfGlass':
-                                    return True
-                                if node.bl_idname == 'ShaderNodeBsdfPrincipled':
-                                    # Check if Transmission > 0
-                                    for inp in node.inputs:
-                                        if inp.name in ('Transmission', 'Transmission Weight') and inp.default_value > 0:
-                                            return True
-                return False
-
-        elif complex_id == "volumetric_render":
-            if step_check == "has_volume":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname in ('ShaderNodeVolumeScatter', 'ShaderNodeVolumeAbsorption',
-                                                   'ShaderNodeVolumePrincipled'):
-                                return True
-                # Also check world volume
-                world = scene.world
-                if world and world.use_nodes and world.node_tree:
-                    for node in world.node_tree.nodes:
-                        if node.bl_idname in ('ShaderNodeVolumeScatter', 'ShaderNodeVolumeAbsorption',
-                                               'ShaderNodeVolumePrincipled'):
-                            return True
-                return False
-
-        elif complex_id == "compositing_node_render":
-            if step_check == "has_compositor":
-                node_tree = getattr(scene, "node_tree", None)
-                if getattr(scene, "use_nodes", False) and node_tree:
-                    # Check for nodes beyond default Render Layers + Composite
-                    real_nodes = [n for n in node_tree.nodes
-                                  if n.type not in ('R_LAYERS', 'COMPOSITE', 'VIEWER', 'OUTPUT_FILE')]
-                    return len(real_nodes) > 0
-                return False
-
-        elif complex_id == "render_passes":
-            if step_check == "has_5_passes":
-                vl = getattr(bpy.context, "view_layer", None)
-                if not vl or vl.name not in scene.view_layers:
-                    vl = scene.view_layers[0] if len(scene.view_layers) else None
-                if vl:
-                    pass_count = 0
-                    pass_attrs = [
-                        'use_pass_diffuse_direct', 'use_pass_diffuse_indirect', 'use_pass_diffuse_color',
-                        'use_pass_glossy_direct', 'use_pass_glossy_indirect', 'use_pass_glossy_color',
-                        'use_pass_transmission_direct', 'use_pass_transmission_indirect', 'use_pass_transmission_color',
-                        'use_pass_emit', 'use_pass_environment', 'use_pass_shadow',
-                        'use_pass_ambient_occlusion', 'use_pass_normal', 'use_pass_vector',
-                        'use_pass_uv', 'use_pass_mist', 'use_pass_object_index',
-                        'use_pass_material_index', 'use_pass_z',
-                    ]
-                    for attr in pass_attrs:
-                        if hasattr(vl, attr) and getattr(vl, attr):
-                            pass_count += 1
-                    return pass_count >= 5
-                return False
-
-        # -------------------------------------------------------
-        # MATERIAL COMPLEX ACHIEVEMENTS
-        # -------------------------------------------------------
-        elif complex_id == "texture_paint":
-            if step_check == "has_texture_paint":
-                # Check if any image has been modified (painted on)
-                for img in bpy.data.images:
-                    if img.is_dirty:
-                        return True
-                return False
-
-        elif complex_id == "uv_unwrap_material":
-            if step_check == "has_uv":
-                for obj in scene.objects:
-                    if obj.type == 'MESH' and obj.data.uv_layers:
-                        return True
-                return False
-            if step_check == "has_image_texture":
-                return _mat_has_node('ShaderNodeTexImage')
-
-        elif complex_id == "emission_material":
-            if step_check == "has_emission":
-                return _mat_has_node('ShaderNodeEmission')
-
-        elif complex_id == "glass_ior":
-            if step_check == "has_glass_ior":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname == 'ShaderNodeBsdfGlass':
-                                ior_input = node.inputs.get('IOR')
-                                if ior_input and 1.40 <= ior_input.default_value <= 1.60:
-                                    return True
-                return False
-
-        elif complex_id == "mix_shader":
-            if step_check == "has_mix_shader":
-                return _mat_has_node('ShaderNodeMixShader')
-
-        elif complex_id == "principled_bsdf_full":
-            if step_check == "has_base_color":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname == 'ShaderNodeBsdfPrincipled':
-                                bc = node.inputs.get('Base Color')
-                                if bc and bc.is_linked:
-                                    return True
-                return False
-            if step_check == "has_normal_input":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname == 'ShaderNodeBsdfPrincipled':
-                                nm = node.inputs.get('Normal')
-                                if nm and nm.is_linked:
-                                    return True
-                return False
-
-        elif complex_id == "normal_map_material":
-            if step_check == "has_normal_map":
-                return _mat_has_node('ShaderNodeNormalMap')
-
-        elif complex_id == "subsurface_skin":
-            if step_check == "has_subsurface":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname == 'ShaderNodeBsdfPrincipled':
-                                # Blender 4.x+: "Subsurface Weight" or "Subsurface"
-                                for inp in node.inputs:
-                                    if 'subsurface' in inp.name.lower() and 'color' not in inp.name.lower() and 'radius' not in inp.name.lower():
-                                        if inp.default_value > 0.0 or inp.is_linked:
-                                            return True
-                return False
-
-        elif complex_id == "procedural_texture":
-            if step_check == "has_procedural":
-                procedural_types = {
-                    'ShaderNodeTexNoise', 'ShaderNodeTexVoronoi',
-                    'ShaderNodeTexWave', 'ShaderNodeTexMusgrave',
-                    'ShaderNodeTexChecker', 'ShaderNodeTexBrick',
-                    'ShaderNodeTexGradient', 'ShaderNodeTexMagic',
-                }
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname in procedural_types:
-                                return True
-                return False
-            if step_check == "no_image_texture":
-                # The same material that has procedural nodes must NOT have Image Texture
-                procedural_types = {
-                    'ShaderNodeTexNoise', 'ShaderNodeTexVoronoi',
-                    'ShaderNodeTexWave', 'ShaderNodeTexMusgrave',
-                    'ShaderNodeTexChecker', 'ShaderNodeTexBrick',
-                    'ShaderNodeTexGradient', 'ShaderNodeTexMagic',
-                }
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        has_proc = any(n.bl_idname in procedural_types for n in mat.node_tree.nodes)
-                        has_img = any(n.bl_idname == 'ShaderNodeTexImage' for n in mat.node_tree.nodes)
-                        if has_proc and not has_img:
-                            return True
-                return False
-
-        elif complex_id == "vertex_color_material":
-            if step_check == "has_vertex_color":
-                # Blender 4.x+: ShaderNodeVertexColor is replaced by ShaderNodeAttribute or Color Attribute
-                return (_mat_has_node('ShaderNodeVertexColor')
-                        or _mat_has_node('ShaderNodeAttribute'))
-
-        elif complex_id == "displacement_material":
-            if step_check == "has_displacement":
-                for mat in bpy.data.materials:
-                    if mat.use_nodes and mat.node_tree:
-                        for node in mat.node_tree.nodes:
-                            if node.bl_idname == 'ShaderNodeOutputMaterial':
-                                disp = node.inputs.get('Displacement')
-                                if disp and disp.is_linked:
-                                    return True
-                return False
-
-        # -------------------------------------------------------
-        # GEOMETRY NODES COMPLEX ACHIEVEMENTS
-        # -------------------------------------------------------
-        elif complex_id == "first_geonode":
-            if step_check == "has_geonodes_mod":
-                for obj in scene.objects:
-                    if obj.type == 'MESH':
-                        for mod in obj.modifiers:
-                            if mod.type == 'NODES' and mod.node_group:
-                                return True
-                return False
-
-        elif complex_id == "geonode_instance":
-            if step_check == "has_gn_instance":
-                return _gn_has_node('GeometryNodeInstanceOnPoints')
-
-        elif complex_id == "geonode_scatter":
-            if step_check == "has_gn_scatter":
-                return _gn_has_node('GeometryNodeDistributePointsOnFaces')
-
-        elif complex_id == "geonode_attribute":
-            if step_check == "has_gn_attribute":
-                return (_gn_has_node('GeometryNodeStoreNamedAttribute')
-                        or _gn_has_node('GeometryNodeInputNamedAttribute'))
-
-        elif complex_id == "geonode_curve_to_mesh":
-            if step_check == "has_gn_curve_to_mesh":
-                return _gn_has_node('GeometryNodeCurveToMesh')
-
-        elif complex_id == "geonode_noise_deform":
-            if step_check == "has_gn_noise":
-                return _gn_has_node('ShaderNodeTexNoise')
-            if step_check == "has_gn_set_position":
-                return _gn_has_node('GeometryNodeSetPosition')
-
-        elif complex_id == "geonode_group_input":
-            if step_check == "has_gn_group_input":
-                for ng in _gn_trees():
-                    for node in ng.nodes:
-                        if node.type == 'GROUP_INPUT':
-                            # Check if it has more than the default geometry socket
-                            if len(node.outputs) > 2:  # geometry + blank
-                                return True
-                return False
-
-        elif complex_id == "geonode_convex_hull":
-            if step_check == "has_gn_convex_hull":
-                return _gn_has_node('GeometryNodeConvexHull')
-
-        elif complex_id == "geonode_boolean_node":
-            if step_check == "has_gn_boolean":
-                return _gn_has_node('GeometryNodeMeshBoolean')
-
-        elif complex_id == "geonode_realize_instances":
-            if step_check == "has_gn_realize":
-                return _gn_has_node('GeometryNodeRealizeInstances')
-
-        elif complex_id == "geonode_field_math":
-            if step_check == "has_gn_field_math":
-                return (_gn_has_node('GeometryNodeFieldAtIndex')
-                        or _gn_has_node('GeometryNodeSampleIndex')
-                        or _gn_has_node_label_or_name('evaluate'))
-
-        elif complex_id == "geonode_domain_switch":
-            if step_check == "has_gn_domain_switch":
-                return (_gn_has_node('GeometryNodeSampleIndex')
-                        or _gn_has_node_label_or_name('transfer attribute')
-                        or _gn_has_node_label_or_name('interpolate domain'))
-
-        elif complex_id == "geonode_simulation":
-            if step_check == "has_gn_simulation":
-                return (_gn_has_node('GeometryNodeSimulationInput')
-                        or _gn_has_node('GeometryNodeSimulationOutput'))
-
-        # -------------------------------------------------------
-        # TIME-BASED COMPLEX ACHIEVEMENTS
-        # -------------------------------------------------------
-        elif complex_id == "night_session":
-            if step_check == "is_night_session":
-                import datetime
-                now = datetime.datetime.now()
-                hour = now.hour
-                # Night session: 22:00 - 02:00
-                return hour >= 22 or hour < 2
-
-        elif complex_id == "early_bird":
-            if step_check == "is_early_bird":
-                import datetime
-                now = datetime.datetime.now()
-                return 5 <= now.hour < 8
-
-        elif complex_id == "weekend_marathon":
-            if step_check == "is_weekend_marathon":
-                import datetime
-                now = datetime.datetime.now()
-                # Check if today is weekend (5=Saturday, 6=Sunday)
-                if now.weekday() >= 5:
-                    # Active time this session = current time_spent minus snapshot at start
-                    active_session = stats.time_spent - stats._time_at_session_start
-                    return active_session >= 6 * 3600
-                return False
-
-        elif complex_id == "daily_streak_7":
-            if step_check == "has_7_day_streak":
-                return _check_streak(stats.daily_sessions, 7)
-
-        elif complex_id == "daily_streak_30":
-            if step_check == "has_30_day_streak":
-                return _check_streak(stats.daily_sessions, 30)
-
-        elif complex_id == "speed_modeler":
-            if step_check == "is_speed_modeler":
-                # Check if user created 500+ vertices in under 5 minutes
-                if stats._speed_model_start > 0:
-                    elapsed = time.time() - stats._speed_model_start
-                    gained = stats.vertices_created - stats._speed_model_verts
-                    if elapsed <= 300 and gained >= 500:
-                        return True
-                    # Reset tracker if more than 5 minutes elapsed
-                    if elapsed > 300:
-                        stats._speed_model_start = time.time()
-                        stats._speed_model_verts = stats.vertices_created
-                return False
-
-        elif complex_id == "blender_legend":
-            if step_check == "has_50_unlocked":
-                return len(stats.unlocked) >= 50
-
-    except Exception as e:
-        print(f"[Achievements] complex step check error ({complex_id}/{step_check}): {e}")
-    return False
 
 def _check_complex(complex_id, scene):
     """Check if ALL steps of a complex achievement are complete."""
@@ -1324,13 +620,12 @@ def on_depsgraph_update(scene, depsgraph):
             stats._prev_faces[name] = cf
 
         # --- Materials ---
-        if name not in stats._prev_mats:
-            if obj.data.materials and len(obj.data.materials) > 0:
-                mat = obj.data.materials[0]
-                if mat is not None and mat.use_nodes:
-                    stats.materials_applied += 1
-                    stats._prev_mats.add(name)
-                    changed = True
+        if name not in stats._prev_mats and obj.data.materials and len(obj.data.materials) > 0:
+            mat = obj.data.materials[0]
+            if mat is not None and mat.use_nodes:
+                stats.materials_applied += 1
+                stats._prev_mats.add(name)
+                changed = True
 
     if changed:
         # Record user activity for active-time tracking
@@ -1388,10 +683,8 @@ def _timer_tick():
     """Periodic timer (60s): flush time, check achievements, save."""
     _flush_session_time()
     check_achievements()
-    try:
+    with suppress(Exception):
         check_complex_achievements()
-    except Exception:
-        pass
     save_data()
     if _pending_notifications:
         _tag_redraw_all()
@@ -1427,10 +720,8 @@ def _ensure_icons():
             fname = ach[key]
             fpath = os.path.join(ICONS_DIR, fname)
             if os.path.exists(fpath):
-                try:
+                with suppress(Exception):
                     pcoll.load(fname, fpath, 'IMAGE')
-                except Exception:
-                    pass
     preview_collections["ach_icons"] = pcoll
     return pcoll
 
@@ -2147,7 +1438,7 @@ def register():
     _register_draw_handlers()
     _addon_registered = True
 
-    print("[Achievements] v0.1 — registered! (100 achievements + XP)")
+    print("[Achievements] v0.2 — registered! (105 achievements + XP)")
     print(f"[Achievements] Data: {DATA_FILE}")
 
 
@@ -2162,7 +1453,7 @@ def unregister():
     ach_lifecycle.unregister_classes(bpy, _classes)
     _unregister_scene_properties()
     _addon_registered = False
-    print("[Achievements] v0.1 — unregistered")
+    print("[Achievements] v0.2 — unregistered")
 
 
 if __name__ == "__main__":

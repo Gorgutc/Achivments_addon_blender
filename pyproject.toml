@@ -1,6 +1,6 @@
 [project]
 name = "achievements-blender-codex-infra"
-version = "0.1.0"
+version = "0.2.0"
 description = "Repo-local Codex infrastructure for the Blender Achievements add-on."
 requires-python = ">=3.11"
 dependencies = []
@@ -21,13 +21,12 @@ python_functions = ["test_*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = [
-    "__init__.py",
-    "achievements_v01 (4).py",
-]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
     "E501",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402", "I001"]

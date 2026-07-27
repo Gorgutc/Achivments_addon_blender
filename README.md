@@ -1,11 +1,13 @@
-# Achievements Addon v0.1 — Руководство разработчика
+# Achievements Addon v0.2 — Руководство разработчика
 
 Аддон геймификации для Blender 5.0+.
-Основная проверяемая среда — Blender 5.1 stable; Blender 5.2 alpha используется как canary.
+Поддерживаемый минимум — Blender 5.0; blocking-проверки выполняются на Blender 5.0.1, 5.1.2 и 5.2.0.
 105 достижений, 9 уроков, XP-система с 10 уровнями, награды.
 Каталог достижений и уроков теперь находится в `achievements/catalog.py`; корневой `__init__.py` остаётся Blender runtime entrypoint и импортирует legacy-имена каталога для совместимости.
 
-Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint.
+Rule/progress evaluation is isolated in `achievements/engine.py`; Blender scene predicates are pure helpers with a root runtime adapter.
+Complex Blender predicates are implemented as pure-Python registries under `achievements/predicates/`; the root entrypoint remains the Blender-facing adapter.
+Unlock hashes are local integrity markers implemented by `achievements/integrity.py`; they are not authentication or anti-cheat.
 Reward manifest/access/fallback planning is isolated in `achievements/rewards.py`; Blender asset linking remains in the runtime operator.
 UI tab, pagination, scene-property, popup-width, overlay-geometry, and storage-filter contracts are isolated in `achievements/ui.py`; Blender layout and GPU drawing remain in the runtime adapter.
 Offline sync planning is isolated in `achievements/sync.py`; the backend is disabled by default, networking is not wired into normal add-on use, and pinned UI state is excluded from sync payloads.
@@ -16,7 +18,7 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 
 ### Вариант 1 — ZIP
 1. `Edit → Preferences → Add-ons → Install from Disk...`
-2. Выбрать `reports/extension/achievements-0.1.0.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
+2. Выбрать `reports/extension/achievements-0.2.0.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
 3. Включить галочку «Achievements»
 
 ### Вариант 2 — Локальная проверка из рабочей папки
@@ -76,44 +78,44 @@ uv run python scripts/run_blender_smoke.py --suite ui_visual
 GitHub Actions mirrors the local gates:
 
 - `.github/workflows/fast-gate.yml` runs `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
-- `.github/workflows/blender-smoke.yml` runs the Blender smoke suites with Blender 5.1 stable as the blocking target.
-- The same Blender smoke workflow includes a Blender 5.2 alpha canary job. The canary URL is read from the repository variable `BLENDER_5_2_ALPHA_URL`; when that variable is empty, the optional canary is skipped without failing the workflow.
+- `.github/workflows/blender-smoke.yml` runs every Blender smoke suite on a fixed blocking matrix: Blender 5.0.1, 5.1.2, and 5.2.0.
+- The matrix contains no optional canary, repository download variable, skipped row, or `continue-on-error` target.
 
 Release packaging:
 
 ```bash
-uv run python scripts/build_extension.py --output-dir reports/extension --server-generate
+uv run python scripts/build_extension.py --revision HEAD --output-dir reports/extension --server-generate
 blender --background --command extension validate reports/extension/source
 blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension
 blender --background --command extension server-generate --repo-dir reports/extension --html
 ```
 
-`scripts/build_extension.py` prepares the release source tree and prints the exact Blender extension commands. The commands are run directly from the shell so Windows process handling stays predictable.
+`scripts/build_extension.py` prepares the release source tree and prints the exact Blender extension commands. `--revision HEAD` reads committed Git blobs and rejects dirty or untracked runtime payload; working-tree mode LF-normalizes known UTF-8 runtime files. The commands are run directly from the shell so Windows process handling stays predictable.
 The helper refuses to clean or write a release source directory outside the generated `reports/` tree.
 
-The generated release package is written to `reports/extension/achievements-0.1.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and the tracked duplicate `achievements_v01 (4).py`; it includes only `blender_manifest.toml`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved.
+The generated release package is written to `reports/extension/achievements-0.2.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
 
 ---
 
 ## Карта основных файлов
 
-| Строки        | Что содержит                                  | Для чего редактировать                |
+| Файл/символ   | Что содержит                                  | Для чего редактировать                |
 |---------------|-----------------------------------------------|---------------------------------------|
-| **1–9**       | `bl_info`                                     | Имя аддона, автор, версия             |
-| **46–52**     | Пути (`DATA_DIR`, `ICONS_DIR`, `REWARDS_DIR`) | Изменить папку хранения данных        |
-| **58–66**     | Сетка карточек (`GRID_COLS`, `PAGE_SIZE`)     | Кол-во столбцов/строк в окне          |
-| **72–83**     | Уведомления (`NOTIFY_*`)                      | Размер/длительность уведомлений       |
-| **94**        | `_REWARD_SALT`                                | Соль хеша для защиты наград           |
+| `__init__.py`: `bl_info` | Метаданные аддона | Имя, автор, версия и минимум Blender |
+| `__init__.py`: `DATA_*`, `ICONS_DIR` | Пути локальных данных | Изменить расположение пользовательских данных |
+| `__init__.py`: `GRID_*`, `PAGE_SIZE` | Сетка карточек | Кол-во столбцов/строк в окне |
+| `__init__.py`: `NOTIFY_*` | Уведомления | Размер/длительность уведомлений |
+| `achievements/integrity.py` | Локальный unlock integrity marker | Сохранить совместимый salt/username/SHA-256 формат |
 | `achievements/catalog.py` | Категории, `ACHIEVEMENTS_DEF`, `LESSONS_DEF`, валидаторы каталога | Добавить/переименовать категории, достижения, уроки |
 | `achievements/events.py` | Active-time, session, scene snapshot helpers | Править учет активности без импорта `bpy` |
 | `achievements/lifecycle.py` | Idempotent registration helpers | Править hot-reload lifecycle без прямого изменения handler/timer wiring |
 | `achievements/persistence.py` | Schema migration, atomic JSON writes, corrupt recovery | Править сохранение прогресса без импорта `bpy` |
 | `achievements/sync.py` | Offline queue, disabled backend, deterministic conflicts | Plan future cloud sync without network calls in normal add-on use |
-| **139–143**   | `DIFFICULTY_XP`                               | Очки XP за сложность                  |
-| **156–167**   | `LEVEL_TITLES`                                | Звания уровней                        |
-| **190–196**   | `_difficulty_label()`                         | Метки сложности на карточках           |
-| **449**       | `_IDLE_TIMEOUT`                               | Тайм-аут бездействия (сек.)           |
-| **813–1527**  | `_check_complex_step()`                       | Логика проверки комплексных достижений |
+| `__init__.py`: `DIFFICULTY_XP` | Очки XP | Настроить очки за сложность |
+| `__init__.py`: `LEVEL_TITLES` | Звания уровней | Изменить русские названия уровней |
+| `__init__.py`: `_difficulty_label()` | Метки сложности | Изменить подписи на карточках |
+| `__init__.py`: `_IDLE_TIMEOUT` | Тайм-аут бездействия | Изменить интервал активной работы |
+| `achievements/predicates/` | Pure complex predicates и registry | Добавить/изменить проверку сцены без `bpy` |
 
 ---
 
@@ -151,12 +153,12 @@ ACH_CATEGORIES = [
     ("TIME",       "Время в Blender"),
     ("RENDERING",  "Рендеринг"),
 ]
-# Аналогично LESSON_CATEGORIES (строка 119) и REWARD_CATEGORIES (строка 127)
+# Аналогично константам LESSON_CATEGORIES и REWARD_CATEGORIES в этом файле
 ```
 
 ### 1.3 Звания уровней
 
-**Строки 156–167:**
+**Корневой `__init__.py`, символ `LEVEL_TITLES`:**
 ```python
 LEVEL_TITLES = {
     1: "Новичок",      2: "Начинающий",    3: "Ньюблинг",
@@ -168,7 +170,7 @@ LEVEL_TITLES = {
 
 ### 1.4 Метки сложности
 
-**Строки 190–196:**
+**Корневой `__init__.py`, функция `_difficulty_label()`:**
 ```python
 "easy":   ("Легко",  "SOLO_ON"),  # текст + иконка Blender
 "medium": ("Средне", "TIME"),
@@ -177,7 +179,7 @@ LEVEL_TITLES = {
 
 ### 1.5 Вкладки интерфейса
 
-**Строка 2325** (внутри `register()`):
+**Файл `achievements/ui.py`, константа `TABS`:**
 ```python
 items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
        ("LESSONS", "Уроки", ""), ("STORAGE", "Хранилище", "")],
@@ -192,7 +194,7 @@ items=[("TASKS", "Задания", ""), ("DONE", "Выполнено", ""),
 **Папка:** `~/BlenderAchievements/textures/`
 **Формат:** PNG, 128×128 px (отображается 100×100)
 
-У каждого достижения два поля (строки 251–357):
+У каждого достижения в `achievements/catalog.py` есть два поля:
 ```python
 "icon_gray": "first_vertex_gray.png",   # Заблокированное состояние
 "icon_color": "first_vertex_color.png", # Разблокированное состояние
@@ -379,28 +381,28 @@ grep -n '"url"' achievements/catalog.py
 ### Комплексное достижение (проверка сцены)
 
 1. Добавьте словарь с `"check_type": "complex"` и `"stat_key": "_complex"`
-2. Добавьте проверку в функцию `_check_complex_step()` (строка 813):
+2. Добавьте pure-проверку в подходящий модуль `achievements/predicates/` и зарегистрируйте пару `(complex_id, step_check)` в registry:
 
 ```python
-if step_check == "my_custom_check":
-    return some_blender_condition
+def has_my_custom_state(context):
+    return PredicateResult(matched=some_duck_typed_condition)
 ```
 
 ### Удаление достижения
 
 1. Удалите словарь из `ACHIEVEMENTS_DEF`
-2. Если комплексное — удалите кейс из `_check_complex_step()`
+2. Если комплексное — удалите соответствующую пару из predicate registry и обновите bijection-тесты
 3. Старый прогресс останется в JSON, но будет проигнорирован
 
 ---
 
 ## 6. XP-СИСТЕМА
 
-| Параметр          | Строки   | Описание                                     |
-|-------------------|----------|----------------------------------------------|
-| `DIFFICULTY_XP`   | 139–143  | Очки за сложность: easy=5, medium=10, hard=20|
-| `XP_LEVELS`       | 147–153  | Пороги уровней (удваиваются от 20)           |
-| `LEVEL_TITLES`    | 156–167  | Русские звания для каждого уровня             |
+| Параметр          | Файл          | Описание                                     |
+|-------------------|---------------|----------------------------------------------|
+| `DIFFICULTY_XP`   | `__init__.py` | Очки за сложность: easy=5, medium=10, hard=20|
+| `XP_LEVELS`       | `__init__.py` | Пороги уровней (удваиваются от 20)           |
+| `LEVEL_TITLES`    | `__init__.py` | Русские звания для каждого уровня            |
 
 Итого: уровень 10 требует 20460 XP суммарно.
 
@@ -424,13 +426,13 @@ grep -n 'icon_gray\|icon_color' achievements/catalog.py
 # Все stat_key:
 grep -n 'stat_key' achievements/catalog.py
 
-# Все проверки комплексных шагов:
-grep -n 'step_check ==' __init__.py
+# Все registry complex predicates:
+rg -n '_PREDICATES|PREDICATE_REGISTRY' achievements/predicates
 ```
 
 ---
 
-## 8. ИЗВЕСТНЫЕ ОГРАНИЧЕНИЯ v0.1
+## 8. ИЗВЕСТНЫЕ ОГРАНИЧЕНИЯ v0.2
 
 - Иконки — заглушки (без реальных PNG файлов, используется FUND)
 - URL уроков — заглушки (placeholder YouTube ссылки)
