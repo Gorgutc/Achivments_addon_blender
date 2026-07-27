@@ -84,16 +84,39 @@ GitHub Actions mirrors the local gates:
 Release packaging:
 
 ```bash
-uv run python scripts/build_extension.py --revision HEAD --output-dir reports/extension --server-generate
-blender --background --command extension validate reports/extension/source
-blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension
-blender --background --command extension server-generate --repo-dir reports/extension --html
+uv run python scripts/build_extension.py --revision HEAD --source-dir reports/extension-validation/<run-id>/blender-5.1.2/source --output-dir reports/extension-validation/<run-id>/blender-5.1.2 --server-generate --run-blender --blender "<path-to-blender-5.1.2>"
 ```
 
-`scripts/build_extension.py` prepares the release source tree and prints the exact Blender extension commands. `--revision HEAD` reads committed Git blobs and rejects dirty or untracked runtime payload; working-tree mode LF-normalizes known UTF-8 runtime files. The commands are run directly from the shell so Windows process handling stays predictable.
+`scripts/build_extension.py` prepares the release source tree and runs Blender
+`extension validate`, `extension build`, and, when requested,
+`extension server-generate` through an isolated wrapper. Every command uses
+`--factory-startup`; the wrapper also points `HOME`, `USERPROFILE`, and
+`BLENDER_USER_RESOURCES` at one disposable profile and fails closed unless the
+expected success markers are present without traceback/error/warning output.
+Cleanup residue emits nonfatal `[extension-cli:WARN]`, but that marker
+invalidates release acceptance even when the helper exits zero; resolve the
+residue and rerun with a new `<run-id>`.
+Use a fresh, never-used per-run output directory for every `server-generate`
+gate: replace `<run-id>` on each rerun. The helper rejects pre-existing ZIPs or
+repository metadata and never deletes them.
+The default `reports/extension/` directory is therefore unsuitable for a
+server gate while its `achievements-0.1.0.zip` baseline is present. After all
+version-specific build gates and ZIP audits pass, select one exact verified
+`achievements-0.2.0.zip`, freeze its SHA-256/member digests, and deliberately
+byte-copy it from its fresh output to
+`reports/extension/achievements-0.2.0.zip`. The destination must not already
+exist; verify identical source/destination SHA-256. Never rebuild
+or overwrite the canonical ZIP, and do not implicitly clean or replace the
+older baseline. Use that exact frozen canonical SHA for install/enable and
+register/unregister smoke on Blender 5.0.1, 5.1.2, and 5.2.0; per-version
+self-built ZIPs are build evidence only. Without `--run-blender`, the helper only prints the
+auditable commands; do not run those commands against a real Blender user
+profile. `--revision HEAD` reads committed Git blobs and rejects dirty or
+untracked runtime payload; working-tree mode LF-normalizes known UTF-8 runtime
+files.
 The helper refuses to clean or write a release source directory outside the generated `reports/` tree.
 
-The generated release package is written to `reports/extension/achievements-0.2.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
+The audited release package is deliberately published to `reports/extension/achievements-0.2.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
 
 ---
 

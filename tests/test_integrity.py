@@ -8,6 +8,44 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+
+def test_current_username_preserves_working_legacy_login():
+    from achievements.integrity import current_username
+
+    def unexpected_fallback():
+        raise AssertionError("fallback must not run when os.getlogin succeeds")
+
+    assert current_username(
+        login_resolver=lambda: "junior",
+        fallback_resolver=unexpected_fallback,
+    ) == "junior"
+
+
+def test_current_username_uses_deterministic_headless_fallback():
+    from achievements.integrity import current_username
+
+    def headless_login():
+        raise OSError(-25, "no controlling terminal")
+
+    assert current_username(
+        login_resolver=headless_login,
+        fallback_resolver=lambda: "runner",
+    ) == "runner"
+
+
+def test_current_username_uses_fixed_value_when_both_resolvers_fail():
+    from achievements.integrity import UNAVAILABLE_USERNAME, current_username
+
+    def unavailable():
+        raise OSError("username unavailable")
+
+    assert current_username(
+        login_resolver=unavailable,
+        fallback_resolver=unavailable,
+    ) == UNAVAILABLE_USERNAME
+    assert UNAVAILABLE_USERNAME == "unknown-user"
+
+
 def test_make_unlock_hash_preserves_legacy_format():
     from achievements.integrity import (
         UNLOCK_HASH_LENGTH,

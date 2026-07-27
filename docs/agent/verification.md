@@ -30,10 +30,30 @@ GitHub Actions Blender smoke:
 - Blender smoke jobs set `BLENDER_BIN`; the smoke runner still creates temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` for each suite.
 
 Release packaging gate:
-- `uv run python scripts/build_extension.py --revision HEAD --output-dir reports/extension --server-generate`
-- `blender --background --command extension validate reports/extension/source`
-- `blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension`
-- `blender --background --command extension server-generate --repo-dir reports/extension --html`
+- For each supported Blender version, use a fresh per-run repository directory:
+  `uv run python scripts/build_extension.py --revision HEAD --source-dir reports/extension-validation/<run-id>/<version>/source --output-dir reports/extension-validation/<run-id>/<version> --server-generate --run-blender --blender "<path-to-that-blender>"`.
+  Replace `<run-id>` on every rerun so the output is fresh and never-used.
+- The isolated wrapper executes `extension validate`, `extension build`, and
+  optional `extension server-generate` with `--factory-startup` and temporary
+  `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`. Require all requested
+  `[extension-cli:PASS]` markers and no traceback/error/warning output.
+- `[extension-cli:WARN]` is nonfatal helper cleanup telemetry but invalidates
+  release acceptance even when the helper exits zero. Resolve the residue and
+  rerun with a new `<run-id>`.
+- `server-generate` requires a fresh per-run output containing only its direct
+  staged `source/` before execution. The helper rejects stale ZIP/index entries
+  and never deletes an older baseline implicitly.
+- `reports/extension/` is unsuitable for a server gate while its 0.1.0 baseline
+  is present. After all version-specific build gates pass, select one exact
+  verified `achievements-0.2.0.zip`, freeze its SHA-256/member digests, and
+  deliberately byte-copy it from a fresh output to
+  `reports/extension/achievements-0.2.0.zip`. The destination must not already
+  exist; confirm identical source/destination SHA-256. Never rebuild or
+  overwrite the canonical ZIP, implicitly clean the canonical directory, or
+  replace the older baseline.
+- Per-version self-built ZIPs are build evidence only. Run install/enable and
+  register/unregister smoke on Blender 5.0.1, 5.1.2, and 5.2.0 against the same
+  exact frozen canonical SHA.
 - Inspect `reports/extension/achievements-0.2.0.zip`: only manifest, `LICENSE`, root runtime, and `achievements/` are allowed. Confirm Git-byte equality, no symlink/traversal/duplicate entries, member digests, final SHA-256, and size.
 
 Static verifier rules:

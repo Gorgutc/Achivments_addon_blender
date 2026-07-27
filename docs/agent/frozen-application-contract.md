@@ -114,7 +114,7 @@ Internal session fields track active time, idle gaps, mesh/material snapshots, d
 
 ## Reward Rules
 
-- Unlock integrity uses the legacy salt, `os.getlogin()`, SHA-256, and the first 16 hex characters through pure `make_unlock_hash`/`verify_unlock_hash` helpers.
+- Unlock integrity uses the legacy salt, the unchanged `os.getlogin()` value when available, SHA-256, and the first 16 hex characters through pure `make_unlock_hash`/`verify_unlock_hash` helpers. Headless sessions fall back to `getpass.getuser()` and finally the fixed `unknown-user` value only when username resolution raises `OSError`.
 - The hash is a local integrity marker, not authentication or anti-cheat.
 - Rewards can be applied only when the achievement is unlocked and the stored unlock hash verifies.
 - `tutorial` rewards open URLs.

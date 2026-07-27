@@ -84,12 +84,14 @@ PIN_MARGIN_Y = NOTIFY_MARGIN
 # =============================================
 def _make_unlock_hash(ach_id):
     """Generate the legacy-compatible local integrity marker."""
-    return ach_integrity.make_unlock_hash(ach_id, os.getlogin())
+    return ach_integrity.make_unlock_hash(ach_id, ach_integrity.current_username())
 
 
 def _verify_unlock(ach_id, stored_hash):
     """Verify the local marker without repairing persisted state."""
-    return ach_integrity.verify_unlock_hash(ach_id, stored_hash, os.getlogin())
+    return ach_integrity.verify_unlock_hash(
+        ach_id, stored_hash, ach_integrity.current_username()
+    )
 
 
 # =============================================

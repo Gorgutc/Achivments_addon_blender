@@ -109,6 +109,7 @@ def test_extension_commands_are_explicit(tmp_path):
     assert validate_cmd == [
         "blender",
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "validate",
@@ -117,6 +118,7 @@ def test_extension_commands_are_explicit(tmp_path):
     assert build_cmd == [
         "blender",
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "build",
@@ -128,6 +130,7 @@ def test_extension_commands_are_explicit(tmp_path):
     assert server_cmd == [
         "blender",
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "server-generate",
@@ -151,18 +154,41 @@ def test_extension_commands_use_repo_relative_paths_for_workspace_outputs():
     assert str(ROOT) not in build_cmd
     assert str(ROOT) not in server_cmd
     assert validate_cmd[-1] == str(Path("reports") / "extension" / "source")
-    assert build_cmd[6] == str(Path("reports") / "extension" / "source")
-    assert build_cmd[8] == str(Path("reports") / "extension")
-    assert server_cmd[6] == str(Path("reports") / "extension")
+    assert build_cmd[7] == str(Path("reports") / "extension" / "source")
+    assert build_cmd[9] == str(Path("reports") / "extension")
+    assert server_cmd[7] == str(Path("reports") / "extension")
 
 
-def test_release_helper_prints_commands_without_running_blender():
-    script = ROOT / "scripts" / "build_extension.py"
-    text = script.read_text(encoding="utf-8")
+def test_release_helper_defaults_to_print_only(monkeypatch, tmp_path, capsys):
+    build_extension = load_build_extension_module()
+    monkeypatch.setattr(
+        build_extension,
+        "prepare_release_source",
+        lambda *_args, **_kwargs: (Path("__init__.py"),),
+    )
+    monkeypatch.setattr(build_extension, "find_blender_path", lambda: Path("blender"))
 
-    assert "--run-blender" not in text
-    assert "run_command" not in text
-    assert "subprocess.run(command" not in text
+    def unexpected_execution(*_args, **_kwargs):
+        raise AssertionError("default packaging mode must not launch Blender")
+
+    monkeypatch.setattr(build_extension, "run_extension_commands", unexpected_execution)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_extension.py",
+            "--source-dir",
+            str(tmp_path / "source"),
+            "--output-dir",
+            str(tmp_path / "output"),
+        ],
+    )
+
+    assert build_extension.main() == 0
+    output = capsys.readouterr().out
+    assert "--factory-startup" in output
+    assert "Commands were not executed" in output
+    assert "--run-blender" in output
 
 
 def test_shell_command_formatting_quotes_paths_with_spaces():
@@ -170,6 +196,7 @@ def test_shell_command_formatting_quotes_paths_with_spaces():
     command = [
         r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe",
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "validate",
@@ -178,13 +205,153 @@ def test_shell_command_formatting_quotes_paths_with_spaces():
 
     assert build_extension.format_shell_command(command, platform_name="nt") == (
         "& 'C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe' "
-        "'--background' '--command' 'extension' 'validate' "
+        "'--background' '--factory-startup' '--command' 'extension' 'validate' "
         "'reports\\extension\\source'"
     )
     assert build_extension.format_shell_command(command, platform_name="posix") == (
         "'C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe' "
-        "--background --command extension validate 'reports\\extension\\source'"
+        "--background --factory-startup --command extension validate "
+        "'reports\\extension\\source'"
     )
+
+
+def test_extension_runner_uses_one_disposable_isolated_profile(tmp_path):
+    build_extension = load_build_extension_module()
+    blender = Path("blender")
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "output"
+    commands = (
+        build_extension.extension_validate_command(blender, source_dir),
+        build_extension.extension_build_command(blender, source_dir, output_dir),
+        build_extension.extension_server_generate_command(blender, output_dir),
+    )
+    outputs = {
+        "validate": 'Success parsing TOML in "source"\n',
+        "build": 'building: achievements-0.2.0.zip\ncomplete\ncreated: "candidate.zip"\n',
+        "server-generate": "found 1 packages.\n",
+    }
+    calls = []
+
+    def fake_runner(command, **kwargs):
+        name = build_extension.extension_command_name(command)
+        calls.append((tuple(command), dict(kwargs)))
+        return subprocess.CompletedProcess(command, 0, stdout=outputs[name])
+
+    executions = build_extension.run_extension_commands(
+        commands,
+        temp_parent=tmp_path,
+        runner=fake_runner,
+    )
+
+    assert [execution.name for execution in executions] == [
+        "validate",
+        "build",
+        "server-generate",
+    ]
+    assert len(calls) == 3
+    profiles = {call[1]["env"]["HOME"] for call in calls}
+    assert len(profiles) == 1
+    profile = Path(profiles.pop())
+    assert all(call[1]["env"]["USERPROFILE"] == str(profile) for call in calls)
+    assert all(
+        call[1]["env"]["BLENDER_USER_RESOURCES"]
+        == str(profile / "blender-user-resources")
+        for call in calls
+    )
+    assert all("--factory-startup" in call[0] for call in calls)
+    assert all(call[1]["stderr"] is subprocess.STDOUT for call in calls)
+    assert not profile.exists()
+
+
+def test_extension_runner_warns_when_windows_style_cleanup_is_incomplete(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    build_extension = load_build_extension_module()
+    command = build_extension.extension_validate_command(Path("blender"), tmp_path / "source")
+    profiles = []
+
+    def fake_runner(command, **kwargs):
+        profiles.append(Path(kwargs["env"]["HOME"]))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout='Success parsing TOML in "source"\n',
+        )
+
+    real_rmtree = build_extension.shutil.rmtree
+    monkeypatch.setattr(build_extension.shutil, "rmtree", lambda *_args, **_kwargs: None)
+    try:
+        executions = build_extension.run_extension_commands(
+            (command,),
+            temp_parent=tmp_path,
+            runner=fake_runner,
+        )
+        assert [execution.name for execution in executions] == ["validate"]
+        assert profiles[0].exists()
+        assert "temporary profile cleanup incomplete" in capsys.readouterr().err
+    finally:
+        for profile in profiles:
+            real_rmtree(profile, ignore_errors=True)
+
+
+def test_server_generation_rejects_stale_output_without_deleting_it(tmp_path):
+    build_extension = load_build_extension_module()
+    output_dir = tmp_path / "extension-validation"
+    source_dir = output_dir / "source"
+    source_dir.mkdir(parents=True)
+
+    build_extension.validate_fresh_server_output(output_dir, source_dir)
+
+    old_baseline = output_dir / "achievements-0.1.0.zip"
+    old_baseline.write_bytes(b"owner baseline")
+    with pytest.raises(ValueError, match="fresh per-run output directory") as exc_info:
+        build_extension.validate_fresh_server_output(output_dir, source_dir)
+
+    assert old_baseline.name in str(exc_info.value)
+    assert old_baseline.read_bytes() == b"owner baseline"
+
+
+@pytest.mark.parametrize(
+    ("name", "returncode", "output", "message"),
+    [
+        ("validate", 1, "Success parsing TOML\n", "exit code 1"),
+        (
+            "validate",
+            0,
+            "Success parsing TOML\nTraceback (most recent call last):\n",
+            "failure marker",
+        ),
+        ("build", 0, "complete\n", "missing expected success marker"),
+        (
+            "validate",
+            0,
+            "Success parsing TOML\nerror: lowercase failure\n",
+            "failure marker",
+        ),
+        (
+            "server-generate",
+            0,
+            "WARN: duplicate extension id\nfound 1 packages.\n",
+            "failure marker",
+        ),
+    ],
+)
+def test_extension_result_validation_fails_closed(name, returncode, output, message):
+    build_extension = load_build_extension_module()
+    result = subprocess.CompletedProcess(["blender"], returncode, stdout=output)
+
+    with pytest.raises(RuntimeError, match=message):
+        build_extension.validate_extension_command_result(name, result)
+
+
+def test_extension_runner_rejects_non_isolated_commands(tmp_path):
+    build_extension = load_build_extension_module()
+    unsafe = ["blender", "--background", "--command", "extension", "validate", "source"]
+
+    with pytest.raises(ValueError, match="--factory-startup"):
+        build_extension.run_extension_commands((unsafe,), temp_parent=tmp_path)
 
 
 def write_minimal_payload(root: Path, *, line_ending: bytes = b"\n") -> None:

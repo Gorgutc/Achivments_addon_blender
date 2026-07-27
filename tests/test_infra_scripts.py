@@ -585,6 +585,73 @@ def test_runtime_docs_alignment_matches_current_policy():
     ):
         assert stale_line_reference not in readme
 
+    extension_guidance_paths = (
+        ROOT / "README.md",
+        ROOT / "docs" / "agent" / "packaging-release.md",
+        ROOT / "docs" / "agent" / "quality-tooling.md",
+        ROOT / "docs" / "agent" / "verification.md",
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-packaging"
+        / "SKILL.md",
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-quality-gate"
+        / "SKILL.md",
+    )
+    for path in extension_guidance_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "--run-blender" in text, path
+        assert "--factory-startup" in text, path
+        assert re.search(r"fresh,?\s+(?:never-used\s+)?per-run", text), path
+        assert "never-used" in text, path
+        for profile_variable in ("HOME", "USERPROFILE", "BLENDER_USER_RESOURCES"):
+            assert profile_variable in text, path
+        for subcommand in ("validate", "build", "server-generate"):
+            assert re.search(rf"extension\s+{re.escape(subcommand)}", text), path
+        assert "blender --background --command extension" not in text, path
+
+    for path in extension_guidance_paths[:4] + (extension_guidance_paths[4],):
+        text = path.read_text(encoding="utf-8")
+        assert "reports/extension/" in text, path
+        assert "deliberately" in text, path
+        assert "byte-copy" in text, path
+        assert re.search(
+            r"destination\s+must\s+not\s+already\s+exist",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert "source/destination SHA-256" in text, path
+        assert re.search(
+            r"never\s+rebuild\s+or\s+overwrite",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert "Copy-Item -Force" not in text, path
+        assert re.search(
+            r"per-version\s+self-built\s+ZIPs\s+(?:are|as)\s+build\s+evidence\s+only",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert re.search(r"exact\s+frozen\s+canonical\s+SHA", text), path
+
+    for path in (
+        ROOT / "README.md",
+        ROOT / "docs" / "agent" / "packaging-release.md",
+        ROOT / "docs" / "agent" / "verification.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "[extension-cli:WARN]" in text, path
+        assert re.search(
+            r"invalidates\s+release\s+acceptance\s+even\s+when",
+            text,
+        ), path
+        assert "exits zero" in text, path
+
     find_blender = (ROOT / "scripts" / "find_blender.py").read_text(encoding="utf-8")
     assert "MIN_VERSION = (5, 0, 0)" in find_blender
     assert "Blender 5.2" in find_blender
@@ -630,7 +697,7 @@ def test_runtime_docs_alignment_matches_current_policy():
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
     assert "Achievements 0.2.0 candidate" in packaging_release
     assert "scripts/build_extension.py" in packaging_release
-    assert "reports/extension/source" in packaging_release
+    assert "reports/extension-validation/<run-id>/blender-5.1.2/source" in packaging_release
     assert "release package excludes docs/tests/plugins/scripts" in packaging_release
     assert "ADR 0002 retired `achievements_v01 (4).py`" in packaging_release
     assert "`LICENSE`" in packaging_release

@@ -8,8 +8,10 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +28,27 @@ EXCLUDED_DIR_NAMES = {"__pycache__"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 UTF8_TEXT_FILENAMES = {"LICENSE"}
 UTF8_TEXT_SUFFIXES = {".py", ".toml"}
+EXTENSION_FAILURE_MARKERS = (
+    "traceback (most recent call last):",
+    "error:",
+    "warning:",
+    "warn:",
+)
+EXTENSION_SUCCESS_MARKERS = {
+    "validate": ("Success parsing TOML",),
+    "build": ("complete", "created:"),
+    "server-generate": ("found 1 packages.",),
+}
+DEFAULT_EXTENSION_TIMEOUT_SECONDS = 180
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionCommandExecution:
+    """One successful isolated Blender extension command execution."""
+
+    name: str
+    command: tuple[str, ...]
+    output: str
 
 
 def _is_excluded(relative_path: Path) -> bool:
@@ -359,6 +382,7 @@ def extension_validate_command(blender: Path, source_dir: Path) -> list[str]:
     return [
         str(blender),
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "validate",
@@ -370,6 +394,7 @@ def extension_build_command(blender: Path, source_dir: Path, output_dir: Path) -
     return [
         str(blender),
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "build",
@@ -384,6 +409,7 @@ def extension_server_generate_command(blender: Path, output_dir: Path) -> list[s
     return [
         str(blender),
         "--background",
+        "--factory-startup",
         "--command",
         "extension",
         "server-generate",
@@ -391,6 +417,144 @@ def extension_server_generate_command(blender: Path, output_dir: Path) -> list[s
         blender_cli_path(output_dir),
         "--html",
     ]
+
+
+def extension_command_name(command: Sequence[str]) -> str:
+    """Return and validate the Blender extension subcommand name."""
+    try:
+        command_index = command.index("--command")
+        extension_name = command[command_index + 1]
+        subcommand = command[command_index + 2]
+    except (ValueError, IndexError) as exc:
+        raise ValueError(f"Malformed Blender extension command: {tuple(command)!r}") from exc
+    if extension_name != "extension" or subcommand not in EXTENSION_SUCCESS_MARKERS:
+        raise ValueError(f"Unsupported Blender extension command: {tuple(command)!r}")
+    if "--background" not in command or "--factory-startup" not in command:
+        raise ValueError(
+            "Blender extension commands must use --background and --factory-startup"
+        )
+    return subcommand
+
+
+def extension_cli_env(
+    profile_root: Path,
+    *,
+    base_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Return an environment isolated from every real Blender user profile."""
+    profile_root = profile_root.resolve()
+    blender_user_resources = profile_root / "blender-user-resources"
+    blender_user_resources.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ if base_env is None else base_env)
+    env["HOME"] = str(profile_root)
+    env["USERPROFILE"] = str(profile_root)
+    env["BLENDER_USER_RESOURCES"] = str(blender_user_resources)
+    return env
+
+
+def validate_extension_command_result(
+    name: str,
+    result: subprocess.CompletedProcess[str],
+) -> None:
+    """Fail closed unless Blender reports the expected clean success output."""
+    if name not in EXTENSION_SUCCESS_MARKERS:
+        raise ValueError(f"Unsupported Blender extension command result: {name}")
+    output = result.stdout or ""
+    normalized_output = output.casefold()
+    failures: list[str] = []
+    if result.returncode != 0:
+        failures.append(f"exit code {result.returncode}")
+    present_failure = next(
+        (marker for marker in EXTENSION_FAILURE_MARKERS if marker in normalized_output),
+        None,
+    )
+    if present_failure is not None:
+        failures.append(f"failure marker {present_failure!r}")
+    missing_success = [
+        marker for marker in EXTENSION_SUCCESS_MARKERS[name] if marker not in output
+    ]
+    if missing_success:
+        failures.append(f"missing expected success marker(s): {', '.join(missing_success)}")
+    if failures:
+        detail = "; ".join(failures)
+        raise RuntimeError(f"Blender extension {name} failed closed: {detail}\n{output}")
+
+
+def validate_fresh_server_output(output_dir: Path, source_dir: Path) -> None:
+    """Require a server-generation output containing only this run's source tree."""
+    output_dir = output_dir.resolve()
+    source_dir = source_dir.resolve()
+    if not output_dir.exists():
+        return
+    allowed_source = source_dir if is_relative_to(source_dir, output_dir) else None
+    stale: list[Path] = []
+    for entry in output_dir.iterdir():
+        if entry.is_symlink():
+            stale.append(entry)
+            continue
+        if allowed_source is not None and entry.resolve() == allowed_source:
+            continue
+        stale.append(entry)
+    if stale:
+        details = ", ".join(entry.name for entry in sorted(stale, key=lambda path: path.name))
+        raise ValueError(
+            "server-generate requires a fresh per-run output directory; "
+            f"unexpected existing entries: {details}"
+        )
+
+
+def run_extension_commands(
+    commands: Iterable[Sequence[str]],
+    *,
+    cwd: Path = ROOT,
+    temp_parent: Path | None = None,
+    timeout_seconds: int = DEFAULT_EXTENSION_TIMEOUT_SECONDS,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> tuple[ExtensionCommandExecution, ...]:
+    """Run Blender extension commands in one disposable, isolated profile."""
+    prepared = tuple(tuple(str(part) for part in command) for command in commands)
+    if not prepared:
+        raise ValueError("At least one Blender extension command is required")
+    command_names = tuple(extension_command_name(command) for command in prepared)
+    execute = subprocess.run if runner is None else runner
+    parent = None if temp_parent is None else str(temp_parent.resolve())
+    executions: list[ExtensionCommandExecution] = []
+    profile_root = Path(
+        tempfile.mkdtemp(
+            prefix="achievements-extension-cli-",
+            dir=parent,
+        )
+    )
+    try:
+        env = extension_cli_env(profile_root)
+        for name, command in zip(command_names, prepared, strict=True):
+            result = execute(
+                list(command),
+                cwd=cwd,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout_seconds,
+            )
+            validate_extension_command_result(name, result)
+            executions.append(
+                ExtensionCommandExecution(
+                    name=name,
+                    command=command,
+                    output=result.stdout or "",
+                )
+            )
+    finally:
+        shutil.rmtree(profile_root, ignore_errors=True)
+        if profile_root.exists():
+            print(
+                f"[extension-cli:WARN] temporary profile cleanup incomplete: {profile_root}",
+                file=sys.stderr,
+            )
+
+    return tuple(executions)
 
 
 def powershell_quote(value: str) -> str:
@@ -425,6 +589,14 @@ def main() -> int:
         help="Package exact committed Git blobs and reject dirty or untracked runtime files.",
     )
     parser.add_argument("--server-generate", action="store_true")
+    parser.add_argument(
+        "--run-blender",
+        action="store_true",
+        help=(
+            "Execute validate/build/server-generate in an isolated temporary Blender "
+            "profile and fail closed on unexpected output."
+        ),
+    )
     parser.add_argument("--no-clean", action="store_true")
     args = parser.parse_args()
 
@@ -450,6 +622,23 @@ def main() -> int:
     print(f"Prepared {len(payload)} release files from {mode} in {source_dir}")
     for command in commands:
         print(format_shell_command(command))
+    if not args.run_blender:
+        print(
+            "Commands were not executed. Re-run with --run-blender for isolated "
+            "HOME/USERPROFILE/BLENDER_USER_RESOURCES validation."
+        )
+        return 0
+
+    try:
+        if args.server_generate:
+            validate_fresh_server_output(output_dir, source_dir)
+        executions = run_extension_commands(commands)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"[extension-cli:FAIL] {exc}", file=sys.stderr)
+        return 1
+    for execution in executions:
+        print(execution.output, end="" if execution.output.endswith("\n") else "\n")
+        print(f"[extension-cli:PASS] {execution.name}")
     return 0
 
 
