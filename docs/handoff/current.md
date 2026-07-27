@@ -11,7 +11,7 @@ This slice starts from clean `main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`, th
 - Branch: `codex/extension-policy-022`.
 - Base: `main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`.
 - PR #14 (`codex/backlog-technical-closeout`) is confirmed merged: `https://github.com/Gorgutc/Achivments_addon_blender/pull/14`; merge commit `ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`.
-- The 0.2.2 draft integration PR is created only after committed release gates are green. The owner performs any later merge manually.
+- Draft PR #15: `https://github.com/Gorgutc/Achivments_addon_blender/pull/15`. It targets `main` from `codex/extension-policy-022`; the owner performs any later merge manually.
 - Supported blocking matrix: Blender 5.0.1/5.1.2/5.2.0.
 - Do not merge, tag, create a GitHub Release, or auto-merge from this handoff.
 
@@ -40,38 +40,66 @@ The owner confirmed the exact `reports/extension/achievements-0.2.1.zip` was ins
 
 ## Candidate Artifact
 
-- Reserved canonical path: `reports/extension/achievements-0.2.2.zip`.
-- The canonical 0.2.2 candidate, runtime commit, SHA-256, size, member digests, and three-version exact-archive evidence are pending the committed-revision release gate and must be filled in before delivery.
+- Canonical path: `reports/extension/achievements-0.2.2.zip`.
+- Exact runtime source revision: `14defe9794539c8ffe57c1b9d6675a8662564d32`.
+- SHA-256: `7C564D30C10B650B0F004FC857424626F9B06E1C331609C619E39899D658617F`.
+- Size: `62,724` bytes; `22` regular allowlisted members; `237,778` uncompressed bytes.
+- Every member is byte-identical to its Git blob at the runtime source revision. The three Blender builds share one exact member-digest map and contain no symlink, duplicate, path traversal, or unexpected entry. Their ZIP container hashes may differ because Blender writes build metadata; the audited Blender 5.2.0 stream was copied byte-for-byte once to the canonical path and used unchanged for all final lifecycle gates.
 - Immutable predecessor: `reports/extension/achievements-0.2.1.zip`, SHA-256 `568E1595249CA2816E461BE5AA5FAD5687C686BACD613B5B0A72A7E8D5337D42`, size `62,691` bytes. It must not be overwritten or relabeled.
 - The immutable 0.2.0 candidate and quarantined invalid pre-fix artifact also remain untouched.
 
+Canonical member SHA-256 map:
+
+```text
+LICENSE                                            8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903
+__init__.py                                        08377208ba1be1d221b4408826b31e1c6abbce344be80f98e02bbc93abbb614e
+achievements/__init__.py                           56f54ae3cdc1961c3da77601370bc690ca7c7700582e1a5fe53e8f62b2c301b6
+achievements/catalog.py                            849ff560b71f8525bc1055ffeb954cee44775c3a57a5c5d2b0e6418c88916603
+achievements/engine.py                             6755f489f8a277afeb043b2f87f24cae8e349a79287d4a95cb7f14a1912658eb
+achievements/events.py                             964ce539e530bb48bf74eae437b6c27f8f5374dba73de61d53390421fd177368
+achievements/integrity.py                          4d0702afbd48e5840026ec817cc7cbf39082bc719da7d3347b154e098870cdf2
+achievements/lifecycle.py                          1870354727c0048878f93a207010969fc8c09b494f454802175e3e2b06d3a2c0
+achievements/metadata.py                           b2a09c87cc5540f2b2f1b6b9f3900b007e5a7f88a9a882b270b4049592b456fe
+achievements/persistence.py                        eb6ba2d0f7d9df4c6c93117c756e90527bbb1f5c362b39b352fbef8dae456db1
+achievements/predicates/__init__.py                d3a34b25c5f67b730dbc30532a69617472e287a0d5c416c7c44c4302033c9113
+achievements/predicates/geometry_nodes.py           24437b462900fe4228581b49d5512fd9ca5488dc7d89587f0e4f25f95e156960
+achievements/predicates/material.py                 58a22a9b7fc44df1b8d27ec4e56304ee0829818c6c6dd2b947ab07d239e4ab44
+achievements/predicates/object_modifier.py          5fe747f7e9d7914bc019a212720928e269c688b8bcbce2dfd81a567be14844d0
+achievements/predicates/registry.py                 333a81c3f602d8974eb07b5925887fa1eb0a48d52225ae9e2e7315f25350ab18
+achievements/predicates/render.py                   f17133298b8f5220ca572a7df85f9cadb434bbef6f1a48ee69d7877f4fdaf3e1
+achievements/predicates/time_state.py               b1ef18512cf1139177fa462cd4341e1198052f6985845f9a1fc5f1ed7f61edfd
+achievements/predicates/types.py                    9a02f7c9cf9979ee7251232995c4fea3bcf7a0d18276ba300bf5a4d085c815d8
+achievements/rewards.py                             7bb43ca9a34c7b3a2a6c2205f148de35daf653af844b3fd340c1822bc65b7822
+achievements/sync.py                                d0f9f430e471470ab7400cd63663c10e0d448bdf85fe828966dfcb3584393d92
+achievements/ui.py                                  68a1393928e01ca8dbc8d5992449ffab655a9e4695f6df440490dcdbbb2870f6
+blender_manifest.toml                               b553a81daa8e1aa91384f91819758c765e9723fee5e53f276d5d4adc9d68e2df
+```
+
 ## Remaining
 
-- Commit the reviewed implementation, then build 0.2.2 from exact Git blobs with `scripts/build_extension.py --revision HEAD`.
-- Run `extension validate`, `extension build`, `server-generate`, ZIP allowlist/Git-byte/member audit, and the exact canonical archive lifecycle on Blender 5.0.1, 5.1.2, and 5.2.0.
-- Record the final runtime commit, SHA-256, byte size, member digests, and `Critical 0 / Important 0` review evidence here.
-- Push `codex/extension-policy-022`, create the draft integration PR, and observe all blocking CI checks. Leave merge, tag, and GitHub Release to the owner.
+- Commit and push this handoff closeout, then observe every blocking check for the final draft PR #15 head and provide the exact canonical ZIP to the owner for visible acceptance. Leave merge, tag, and GitHub Release to the owner.
 - After the owner manually merges 0.2.2, update only the six approved Achievements files in Second Brain, preserving every protected `instance_matcher` surface byte-for-byte; then add one append-only automatic-memory note.
 - Owner-input epics remain open: 219 referenced PNG files, 11 placeholder tutorial URLs, 20 reward `.blend` names and licenses, predicate-semantics decisions, production cloud, and remaining UI/GPU decomposition.
 
 ## Verification
 
-- Static pre-commit evidence: `verify_frozen.py` 43/43 PASS; `verify_codex_plugin.py` 107/107 PASS after required policy files entered the index; exact predicate verifier PASS; Ruff PASS.
-- All six source Blender suites pass on Blender 5.0.1, 5.1.2, and 5.2.0: 18/18 PASS in disposable profiles.
-- Preliminary working-tree install/policy probes passed on all three supported Blender versions with no `Policy violation with top level module:` and no `Policy violation with sys.path:` output.
-- The strengthened full install/policy/register/unregister/remove lifecycle passed on Blender 5.0.1, 5.1.2, and 5.2.0 against one exact preliminary working-tree archive, SHA-256 `C76B98B483B37DB08E327592453B4A6ABF4D6C24B6170CE02C73AEA1E9E162EC`, including empty warning map, post-remove state, unchanged archive hash, and unchanged disposable sentinels.
-- These preliminary runs do not replace the pending committed-Git canonical ZIP matrix.
+- Committed `uv run` fast gate: `verify_frozen.py` 43/43 PASS; `verify_codex_plugin.py` 107/107 PASS; exact 65-ID/85-pair predicate verifier PASS without `bpy`; Ruff PASS; full pytest `458 passed`.
+- All six source Blender suites pass on committed HEAD for Blender 5.0.1, 5.1.2, and 5.2.0: 18/18 PASS in disposable profiles.
+- Git-backed `extension validate`, `extension build`, and `server-generate` passed independently on all three Blender versions. All three builds contain the same exact Git-byte member map.
+- The canonical ZIP itself passed a second `extension validate` and fresh one-package `server-generate` on all three versions; each generated repository recorded the exact sole `files` permission, no `network`, and the matching archive hash.
+- One exact canonical SHA passed install/enable, full empty warning map, namespace and `sys.path` checks, installed manifest permissions, explicit unregister/register, external Blender-owned CLI removal, disabled/unimportable post-state, and three byte-identical disposable sentinels on Blender 5.0.1, 5.1.2, and 5.2.0. No `Policy violation with top level module:` or `Policy violation with sys.path:` line was emitted.
+- Draft PR #15 blocking checks for implementation commit `14defe9794539c8ffe57c1b9d6675a8662564d32` were all green: Fast gate plus Blender 5.0.1, 5.1.2, and 5.2.0.
 
 ## Agents And Review
 
 - A persistent `requirements_guardian` tracks scope, completed evidence, remaining gates, protected artifacts, and owner-only actions.
 - Code/dead-code, component/instruction-drift, lookahead, and independent verification reviewers run in waves.
-- The first independent review found and closed three Important gaps: incomplete removal lifecycle, partial warning-map inspection, and missing ADR 0004 verifier coverage. Final review is repeated after committed artifact evidence.
-- `/review` fallback covers requirements, complete diff, test evidence, blockers, and residual risks before delivery.
+- The first independent review found and closed three Important gaps: incomplete removal lifecycle, partial warning-map inspection, and missing ADR 0004 verifier coverage.
+- Final component/lookahead and code/dead-code reviews report `Critical 0 / Important 0`. The explicit `/review` fallback covers requirements, complete diff, checks, blockers, and residual risks.
 
 ## Blockers
 
-No known implementation blocker. Delivery is intentionally blocked until the committed 0.2.2 ZIP and full three-version exact-archive gates are complete. Merge, tag, GitHub Release, Second Brain publication, and automatic-memory closeout remain unauthorized before the owner's manual merge.
+No known implementation or packaging blocker. Merge remains intentionally blocked on green final-PR-head CI plus the owner's visible 0.2.2 acceptance and manual merge. Tag, GitHub Release, Second Brain publication, and automatic-memory closeout remain unauthorized before the owner's manual merge.
 
 ## Residual Risks
 
@@ -82,4 +110,4 @@ No known implementation blocker. Delivery is intentionally blocked until the com
 
 ## Next Start Prompt
 
-Continue Achievements 0.2.2 on `codex/extension-policy-022` from `main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`. Read `AGENTS.md`, this handoff, ADR 0002, ADR 0003, and ADR 0004. Complete only the pending committed-artifact, CI, owner-acceptance, and post-merge closeout gates. Do not merge, tag, create a GitHub Release, touch real `~/BlenderAchievements`, overwrite immutable ZIPs, or modify any `instance_matcher` information.
+Continue Achievements 0.2.2 on draft PR #15 from `codex/extension-policy-022`. Read `AGENTS.md`, this handoff, ADR 0002, ADR 0003, and ADR 0004. Confirm final-PR-head blocking CI remains green and record owner acceptance of exact ZIP SHA-256 `7C564D30C10B650B0F004FC857424626F9B06E1C331609C619E39899D658617F`; the owner then merges manually. After merge, perform only the approved six-file Achievements Second Brain closeout and append-only memory note. Do not auto-merge, tag, create a GitHub Release, touch real `~/BlenderAchievements`, overwrite immutable ZIPs, or modify any `instance_matcher` information.

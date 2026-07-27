@@ -501,9 +501,18 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "`main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`",
         "pull/14",
         "PR #14 (`codex/backlog-technical-closeout`) is confirmed merged",
+        "pull/15",
+        "Draft PR #15",
         "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
         "Blender 5.0.1/5.1.2/5.2.0",
         "`reports/extension/achievements-0.2.2.zip`",
+        "14defe9794539c8ffe57c1b9d6675a8662564d32",
+        "7C564D30C10B650B0F004FC857424626F9B06E1C331609C619E39899D658617F",
+        "`62,724` bytes",
+        "`22` regular allowlisted members",
+        "`237,778` uncompressed bytes",
+        "Canonical member SHA-256 map",
+        "blocking checks for implementation commit",
         "`SCHEMA_VERSION = \"1.0.0\"`",
         "ADR 0002",
         "ADR 0004",
@@ -523,6 +532,8 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         assert phrase in current_text
     assert "BLENDER_5_2_ALPHA_URL" not in current_text
     assert "Continue after Iteration 12 merge" not in current_text
+    assert "must be filled in before delivery" not in current_text
+    assert "pending committed-Git canonical ZIP matrix" not in current_text
 
 
 def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
