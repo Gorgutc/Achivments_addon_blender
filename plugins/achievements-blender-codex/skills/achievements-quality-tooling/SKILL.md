@@ -15,6 +15,10 @@ Expectations:
 - Complex-predicate coverage must be a strict catalog-pair to registry bijection,
   not a source-text search.
 - Pure predicate and integrity modules must import without `bpy`.
+- Static checks must require package-relative root-to-support-module imports,
+  reject shipped runtime `sys.path` access or mutation, require manifest
+  `files = "Store progress and load local reward assets"`, and reject manifest
+  `network` permission.
 - Root runtime lint may use only narrow bootstrap exceptions; new modules receive
   the full configured Ruff rules and legacy duplicates must not be excluded.
 - CI Blender smoke is blocking for 5.0.1, 5.1.2, and 5.2.0 with no skipped rows,

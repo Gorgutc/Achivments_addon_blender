@@ -1,6 +1,6 @@
 ---
 name: achievements-frozen-decisions
-description: Check the active 0.2.1 frozen contract before making edits.
+description: Check the active 0.2.2 frozen contract before making edits.
 ---
 
 # Achievements Frozen Decisions
@@ -19,6 +19,12 @@ Frozen by the approved 0.2.1 maintenance slice:
 - Progress reset and extension removal remain separate; removal preserves user data and is completed in Blender's native `Extensions` UI.
 - Add-on-owned operators never invoke self-uninstall.
 - Subsurface requires exact active Weight, and denoiser requires a completed Cycles-render event.
+
+Frozen by the approved 0.2.2 policy closeout:
+- Current identity is 0.2.2 with Blender minimum 5.0.
+- Root-to-support-module imports remain package-relative inside Blender's installed extension namespace; shipped runtime code does not mutate `sys.path` or depend on a top-level `achievements` alias.
+- The manifest requests only `files = "Store progress and load local reward assets"`; production networking remains disabled and no `network` permission is declared.
+- The immutable 0.2.1 and 0.2.0 ZIPs remain historical evidence and are never overwritten or relabeled.
 
 Before future add-on behavior edits, read `docs/agent/frozen-application-contract.md` and identify the exact frozen surface affected.
 

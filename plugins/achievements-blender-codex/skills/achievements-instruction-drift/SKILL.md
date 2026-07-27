@@ -13,3 +13,6 @@ Check:
 - Hooks remain fast.
 - `/review` remains required before delivery.
 - Explicit subagent usage remains required where available.
+- Active identity and candidate paths use 0.2.2; 0.2.1 appears only in preserved historical maintenance or immutable-artifact context.
+- Loader guidance requires package-relative imports and forbids shipped runtime `sys.path` mutation.
+- Manifest guidance uses `files = "Store progress and load local reward assets"` and does not claim `network` permission.

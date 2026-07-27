@@ -240,6 +240,53 @@ def addon_tree() -> ast.Module:
     return ast.parse(ADDON.read_text(encoding="utf-8"))
 
 
+def runtime_python_files() -> tuple[Path, ...]:
+    """Return every Python file that ships in the extension payload."""
+    package_files = tuple(sorted((ROOT / "achievements").rglob("*.py")))
+    return (ADDON, *package_files)
+
+
+def runtime_import_policy_errors() -> list[str]:
+    """Find imports/path access that would escape Blender's ``bl_ext`` namespace."""
+    errors: list[str] = []
+    for path in runtime_python_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        relative_path = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "sys":
+                        errors.append(
+                            f"{relative_path}:{node.lineno}: shipped runtime imports sys"
+                        )
+                    if alias.name == "achievements" or alias.name.startswith("achievements."):
+                        errors.append(
+                            f"{relative_path}:{node.lineno}: absolute import {alias.name}"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                module_name = node.module or ""
+                if node.level == 0 and module_name == "sys":
+                    errors.append(
+                        f"{relative_path}:{node.lineno}: shipped runtime imports from sys"
+                    )
+                if node.level == 0 and (
+                    module_name == "achievements"
+                    or module_name.startswith("achievements.")
+                ):
+                    errors.append(
+                        f"{relative_path}:{node.lineno}: absolute import {module_name}"
+                    )
+            elif isinstance(node, ast.Attribute):
+                path_name = attribute_path(node)
+                if path_name is not None and (
+                    path_name == "sys.path" or path_name.startswith("sys.path.")
+                ):
+                    errors.append(
+                        f"{relative_path}:{node.lineno}: shipped runtime accesses {path_name}"
+                    )
+    return sorted(set(errors))
+
+
 def attribute_path(node: ast.AST) -> str | None:
     if isinstance(node, ast.Name):
         return node.id
@@ -280,7 +327,11 @@ def imports_catalog_definitions(module: ast.Module) -> bool:
     }
     imported: set[str] = set()
     for node in module.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "achievements.catalog":
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 1
+            and node.module == "achievements.catalog"
+        ):
             imported.update(alias.name for alias in node.names)
     return required <= imported
 
@@ -341,7 +392,7 @@ def verify_addon_contract() -> None:
         catalog.catalog_digest(),
     )
     record("bl_info exists", values["bl_info"].get("name") == "Achievements")
-    record("bl_info version is 0.2.1", values["bl_info"].get("version") == (0, 2, 1))
+    record("bl_info version is 0.2.2", values["bl_info"].get("version") == (0, 2, 2))
     record("bl_info Blender floor is 5.0", values["bl_info"].get("blender") == (5, 0, 0))
     record(
         "bl_info advertises 105 achievements",
@@ -355,6 +406,12 @@ def verify_addon_contract() -> None:
             and isinstance(node.ctx, ast.Load)
             for node in ast.walk(module)
         ),
+    )
+    policy_errors = runtime_import_policy_errors()
+    record(
+        "shipped runtime stays inside Blender extension import policy",
+        not policy_errors,
+        "; ".join(policy_errors[:10]),
     )
     record("achievement count is 105", len(achievements) == 105, str(len(achievements)))
     record("lesson count is 9", len(lessons) == 9, str(len(lessons)))

@@ -69,3 +69,6 @@ jobs:
 
       - name: Run UI visual smoke
         run: uv run python scripts/run_blender_smoke.py --suite ui_visual
+
+      - name: Run installed extension policy smoke
+        run: uv run python scripts/run_installed_extension_policy.py

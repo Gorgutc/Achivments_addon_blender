@@ -37,7 +37,7 @@ Release packaging:
   deletes an older baseline.
 - The default `reports/extension/` is not a server-gate workspace while older
   canonical ZIPs are present. Audit a candidate from a fresh
-  output first, then select one exact verified `achievements-0.2.1.zip` and
+  output first, then select one exact verified `achievements-0.2.2.zip` and
   deliberately byte-copy it to the canonical directory. The destination must
   not already exist; verify identical source/destination SHA-256 and never
   rebuild or overwrite the canonical ZIP.
@@ -45,3 +45,5 @@ Release packaging:
   frozen canonical SHA for install/enable and register/unregister smoke on all
   three supported Blender versions.
 - Packaging tests freeze LF/CRLF behavior, dirty/untracked rejection, exact Git bytes, member allowlists, and repeatable member digests.
+- Static contract tests freeze package-relative intra-extension imports, reject runtime `sys.path` mutation, require the exact manifest `files` permission reason, and reject manifest `network` permission.
+- The immutable `achievements-0.2.1.zip` and `achievements-0.2.0.zip` predecessors are historical evidence; tools must not overwrite or relabel them.

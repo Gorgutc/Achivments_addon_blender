@@ -19,7 +19,11 @@ def fail(message: str) -> None:
 
 
 def load_addon():
-    spec = importlib.util.spec_from_file_location(MODULE_NAME, ADDON_PATH)
+    spec = importlib.util.spec_from_file_location(
+        MODULE_NAME,
+        ADDON_PATH,
+        submodule_search_locations=[str(ROOT)],
+    )
     if spec is None or spec.loader is None:
         fail("cannot create module spec")
     module = importlib.util.module_from_spec(spec)

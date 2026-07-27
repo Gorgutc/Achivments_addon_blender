@@ -13,3 +13,5 @@ Rules:
 - Set temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
 - Keep runtime smoke scripts in `tests/blender/`.
 - Do not rely on normal Python to import `bpy`.
+- Exercise installed extension imports through Blender's dynamic `bl_ext.<repository>.achievements` namespace; do not repair import failures by mutating runtime `sys.path`.
+- Confirm the installed manifest requests `files = "Store progress and load local reward assets"` and no `network` permission.

@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Achievements",
     "author": "axximus",
-    "version": (0, 2, 1),
+    "version": (0, 2, 2),
     "blender": (5, 0, 0),
     "location": "3D Viewport > Header (trophy icon)",
     "description": "Gamification addon: 105 achievements, XP & levels, rewards, tutorials",
@@ -10,7 +10,6 @@ bl_info = {
 
 import bpy
 import os
-import sys
 import time
 import hashlib
 from contextlib import suppress
@@ -21,9 +20,12 @@ from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
 
 # ============================================================
-#  ACHIEVEMENTS ADDON — v0.2.1 (release candidate)
+#  ACHIEVEMENTS ADDON — v0.2.2 (release candidate)
 #  Blender 5.0 / 5.1 / 5.2
 #
+#  v0.2.2:
+#  - Blender extension namespace policy compliance
+#  - Package-relative runtime imports without sys.path mutation
 #  v0.2.1:
 #  - 105 achievements across 5 categories
 #  - XP & Level system (10 levels)
@@ -97,26 +99,22 @@ def _verify_unlock(ach_id, stored_hash):
 # =============================================
 #  CATALOG
 # =============================================
-_ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
-if _ADDON_DIR not in sys.path:
-    sys.path.insert(0, _ADDON_DIR)
-
-from achievements.catalog import (
+from .achievements.catalog import (
     ACHIEVEMENTS_DEF,
     ACH_CATEGORIES,
     LESSONS_DEF,
     LESSON_CATEGORIES,
     REWARD_CATEGORIES,
 )
-from achievements import engine as ach_engine
-from achievements import events as ach_events
-from achievements import integrity as ach_integrity
-from achievements import lifecycle as ach_lifecycle
-from achievements import persistence as ach_persistence
-from achievements import predicates as ach_predicates
-from achievements import rewards as ach_rewards
-from achievements import ui as ach_ui
-from achievements import metadata as ach_metadata
+from .achievements import engine as ach_engine
+from .achievements import events as ach_events
+from .achievements import integrity as ach_integrity
+from .achievements import lifecycle as ach_lifecycle
+from .achievements import metadata as ach_metadata
+from .achievements import persistence as ach_persistence
+from .achievements import predicates as ach_predicates
+from .achievements import rewards as ach_rewards
+from .achievements import ui as ach_ui
 
 
 _REWARD_MANIFEST = ach_rewards.RewardManifest.from_achievements(ACHIEVEMENTS_DEF)
@@ -1521,7 +1519,7 @@ def register():
     _register_draw_handlers()
     _addon_registered = True
 
-    print("[Achievements] v0.2.1 — registered! (105 achievements + XP)")
+    print("[Achievements] v0.2.2 — registered! (105 achievements + XP)")
     print(f"[Achievements] Data: {DATA_FILE}")
 
 
@@ -1536,7 +1534,7 @@ def unregister():
     ach_lifecycle.unregister_classes(bpy, _classes)
     _unregister_scene_properties()
     _addon_registered = False
-    print("[Achievements] v0.2.1 — unregistered")
+    print("[Achievements] v0.2.2 — unregistered")
 
 
 if __name__ == "__main__":
