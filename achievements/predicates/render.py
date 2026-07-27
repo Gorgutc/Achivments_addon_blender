@@ -66,7 +66,12 @@ def _has_motion_blur(context: PredicateContext) -> bool:
 
 
 def _has_denoiser(context: PredicateContext) -> bool:
-    return hasattr(context.scene, "cycles") and context.scene.cycles.use_denoising
+    return bool(
+        context.event == "render_complete"
+        and getattr(getattr(context.scene, "render", None), "engine", None)
+        == "CYCLES"
+        and getattr(getattr(context.scene, "cycles", None), "use_denoising", False)
+    )
 
 
 def _has_caustics(context: PredicateContext) -> bool:

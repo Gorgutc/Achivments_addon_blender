@@ -196,7 +196,7 @@ def rich_context() -> PredicateContext:
                 dof=ns(use_dof=True, focus_object=object(), focus_distance=10.0)
             )
         ),
-        render=ns(use_motion_blur=True),
+        render=ns(use_motion_blur=True, engine="CYCLES"),
         cycles=ns(
             use_denoising=True,
             caustics_reflective=True,
@@ -234,9 +234,9 @@ def empty_context() -> PredicateContext:
         tool_settings=ns(use_snap=False, snap_elements=set()),
         world=None,
         camera=None,
-        render=ns(use_motion_blur=False),
+        render=ns(use_motion_blur=False, engine="BLENDER_EEVEE"),
         cycles=ns(
-            use_denoising=False,
+            use_denoising=True,
             caustics_reflective=False,
             caustics_refractive=False,
         ),
@@ -263,6 +263,8 @@ CATALOG_PAIRS = sorted(
 
 def positive_context(pair: tuple[str, str]) -> PredicateContext:
     context = rich_context()
+    if pair == ("denoiser_render", "has_denoiser"):
+        return replace(context, event="render_complete")
     if pair == ("early_bird", "is_early_bird"):
         return replace(
             context,
@@ -306,6 +308,31 @@ def test_each_catalog_predicate_is_exception_safe(complex_id, step_check):
     context = replace(empty_context(), scene=None, data=None, view_layer=None)
     result = evaluate_predicate(complex_id, step_check, context)
     assert result.matched is False
+
+
+@pytest.mark.parametrize(("complex_id", "step_check"), CATALOG_PAIRS)
+def test_each_registered_predicate_catches_real_exceptions(
+    complex_id,
+    step_check,
+    monkeypatch,
+):
+    from achievements.predicates import registry
+
+    def raise_sentinel(_context):
+        raise RuntimeError("sentinel")
+
+    monkeypatch.setitem(
+        registry.PREDICATE_REGISTRY,
+        (complex_id, step_check),
+        raise_sentinel,
+    )
+    result = registry.evaluate_predicate(
+        complex_id,
+        step_check,
+        rich_context(),
+    )
+    assert result.matched is False
+    assert result.error == "RuntimeError: sentinel"
 
 
 def test_speed_modeler_returns_immutable_reset_plan_without_mutation():
@@ -385,6 +412,82 @@ def test_procedural_without_image_requires_one_qualifying_material():
     ).matched
     assert not evaluate_predicate(
         "procedural_texture", "no_image_texture", context
+    ).matched
+
+
+def test_subsurface_requires_active_weight_not_default_scale_or_ior():
+    inputs = Inputs(
+        [
+            ns(name="Subsurface Weight", default_value=0.0, is_linked=False),
+            ns(name="Subsurface Scale", default_value=0.05, is_linked=False),
+            ns(name="Subsurface IOR", default_value=1.4, is_linked=False),
+            ns(name="Subsurface Radius", default_value=(1.0, 0.2, 0.1), is_linked=False),
+            ns(name="Subsurface Color", default_value=(1.0, 0.8, 0.6, 1.0), is_linked=False),
+        ]
+    )
+    default_material = material(
+        "DefaultPrincipled",
+        [node("ShaderNodeBsdfPrincipled", inputs=inputs)],
+    )
+    context = replace(
+        empty_context(),
+        data=ns(collections=[], materials=[default_material], images=[]),
+    )
+
+    assert not evaluate_predicate(
+        "subsurface_skin", "has_subsurface", context
+    ).matched
+
+    inputs.get("Subsurface Weight").default_value = 0.25
+    assert evaluate_predicate(
+        "subsurface_skin", "has_subsurface", context
+    ).matched
+
+    inputs.get("Subsurface Weight").default_value = 0.0
+    inputs.get("Subsurface Weight").is_linked = True
+    assert evaluate_predicate(
+        "subsurface_skin", "has_subsurface", context
+    ).matched
+
+
+def test_denoiser_requires_completed_cycles_render_event():
+    context = empty_context()
+    assert not evaluate_predicate(
+        "denoiser_render", "has_denoiser", context
+    ).matched
+
+    cycles_without_event = with_scene(
+        context,
+        render=ns(use_motion_blur=False, engine="CYCLES"),
+    )
+    assert not evaluate_predicate(
+        "denoiser_render", "has_denoiser", cycles_without_event
+    ).matched
+
+    eevee_render_event = replace(context, event="render_complete")
+    assert not evaluate_predicate(
+        "denoiser_render", "has_denoiser", eevee_render_event
+    ).matched
+
+    denoising_off = replace(
+        with_scene(
+            context,
+            render=ns(use_motion_blur=False, engine="CYCLES"),
+            cycles=ns(
+                use_denoising=False,
+                caustics_reflective=False,
+                caustics_refractive=False,
+            ),
+        ),
+        event="render_complete",
+    )
+    assert not evaluate_predicate(
+        "denoiser_render", "has_denoiser", denoising_off
+    ).matched
+
+    denoising_on = replace(cycles_without_event, event="render_complete")
+    assert evaluate_predicate(
+        "denoiser_render", "has_denoiser", denoising_on
     ).matched
 
 

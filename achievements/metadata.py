@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 ADDON_NAME = "Achievements"
-ADDON_VERSION = (0, 2, 0)
+ADDON_VERSION = (0, 2, 1)
 BLENDER_COMPATIBILITY_FLOOR = (5, 0, 0)
 MINIMUM_VALIDATION_TARGET = "Blender 5.0.1"
 PRIMARY_VALIDATION_TARGET = "Blender 5.1.2"

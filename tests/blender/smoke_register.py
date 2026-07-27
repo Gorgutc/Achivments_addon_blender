@@ -78,6 +78,32 @@ def main() -> None:
         fail("root import created DATA_DIR before register")
 
     module.register()
+    preferences_operator = bpy.ops.screen.userpref_show.get_rna_type()
+    if "section" not in preferences_operator.properties:
+        fail("screen.userpref_show does not expose the section property")
+    section_items = {
+        item.identifier
+        for item in preferences_operator.properties["section"].enum_items
+    }
+    if "EXTENSIONS" not in section_items:
+        fail("screen.userpref_show section does not include EXTENSIONS")
+    required_extension_properties = {
+        "extension_type",
+        "extension_show_panel_installed",
+        "extension_show_panel_available",
+        "extension_search",
+        "extension_tags",
+    }
+    missing_extension_properties = sorted(
+        name
+        for name in required_extension_properties
+        if not hasattr(bpy.context.window_manager, name)
+    )
+    if missing_extension_properties:
+        fail(
+            "extension management properties missing: "
+            f"{missing_extension_properties}"
+        )
     missing_props = [prop for prop in scene_props(module) if not hasattr(bpy.types.Scene, prop)]
     if missing_props:
         fail(f"register did not create Scene props: {missing_props[:5]}")

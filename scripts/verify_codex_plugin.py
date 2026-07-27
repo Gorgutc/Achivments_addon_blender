@@ -50,6 +50,7 @@ REQUIRED_DOCS = [
     "docs/agent/archive-policy.md",
     "docs/agent/adrs/0001-codex-infra-port.md",
     "docs/agent/adrs/0002-retire-legacy-runtime-duplicate.md",
+    "docs/agent/adrs/0003-safe-extension-removal-and-render-events.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
@@ -272,7 +273,7 @@ def verify_extension_contract() -> None:
     record("GPL-3.0-or-later license exists: LICENSE", license_file.is_file())
     if manifest.is_file():
         manifest_data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-        record("extension version is 0.2.0", manifest_data.get("version") == "0.2.0")
+        record("extension version is 0.2.1", manifest_data.get("version") == "0.2.1")
         record("extension minimum Blender is 5.0.0", manifest_data.get("blender_version_min") == "5.0.0")
         record(
             "extension manifest declares GPL-3.0-or-later",

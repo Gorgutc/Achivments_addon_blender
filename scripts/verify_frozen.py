@@ -99,6 +99,7 @@ FROZEN_FUNCTIONS = {
     "_draw_unified_card",
     "_ensure_icons",
     "_ensure_data_dirs",
+    "_extension_management_target",
     "_flush_session_time",
     "_get_icon_id",
     "_get_mesh_counts",
@@ -141,6 +142,7 @@ FROZEN_CLASSES = {
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
     "ACH_OT_ResetAchievements",
+    "ACH_OT_OpenExtensionManager",
     "Stats",
 }
 FROZEN_REGISTER_CLASSES = {
@@ -152,6 +154,7 @@ FROZEN_REGISTER_CLASSES = {
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
     "ACH_OT_ResetAchievements",
+    "ACH_OT_OpenExtensionManager",
 }
 ACHIEVEMENT_FIELDS = {
     "id",
@@ -235,6 +238,16 @@ def constant_assignments(module: ast.Module, names: set[str]) -> dict[str, Any]:
 
 def addon_tree() -> ast.Module:
     return ast.parse(ADDON.read_text(encoding="utf-8"))
+
+
+def attribute_path(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = attribute_path(node.value)
+        if parent:
+            return f"{parent}.{node.attr}"
+    return None
 
 
 def assignment_dict(module: ast.Module) -> dict[str, Any]:
@@ -328,7 +341,7 @@ def verify_addon_contract() -> None:
         catalog.catalog_digest(),
     )
     record("bl_info exists", values["bl_info"].get("name") == "Achievements")
-    record("bl_info version is 0.2.0", values["bl_info"].get("version") == (0, 2, 0))
+    record("bl_info version is 0.2.1", values["bl_info"].get("version") == (0, 2, 1))
     record("bl_info Blender floor is 5.0", values["bl_info"].get("blender") == (5, 0, 0))
     record(
         "bl_info advertises 105 achievements",
@@ -347,6 +360,21 @@ def verify_addon_contract() -> None:
     record("top-level function map frozen", functions == FROZEN_FUNCTIONS)
     record("top-level class map frozen", classes == FROZEN_CLASSES)
     record("registered operator classes frozen", registered_classes(module) == FROZEN_REGISTER_CLASSES)
+    call_paths = {
+        path
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call)
+        if (path := attribute_path(node.func)) is not None
+    }
+    record(
+        "runtime opens native extension management without self-uninstall",
+        "bpy.ops.screen.userpref_show" in call_paths
+        and not any(
+            path.startswith("bpy.ops.extensions.package_uninstall")
+            for path in call_paths
+        )
+        and "bpy.ops.preferences.addon_remove" not in call_paths,
+    )
 
     achievement_ids = [item.get("id") for item in achievements]
     lesson_ids = [item.get("id") for item in lessons]

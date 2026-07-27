@@ -91,15 +91,13 @@ def _has_subsurface(context: PredicateContext) -> bool:
         for node in material.node_tree.nodes:
             if node.bl_idname != "ShaderNodeBsdfPrincipled":
                 continue
-            for node_input in node.inputs:
-                name = node_input.name.lower()
-                if (
-                    "subsurface" in name
-                    and "color" not in name
-                    and "radius" not in name
-                    and (node_input.default_value > 0.0 or node_input.is_linked)
-                ):
-                    return True
+            node_input = node.inputs.get("Subsurface Weight")
+            if node_input is None:
+                node_input = node.inputs.get("Subsurface")
+            if node_input is not None and (
+                node_input.is_linked or node_input.default_value > 0.0
+            ):
+                return True
     return False
 
 

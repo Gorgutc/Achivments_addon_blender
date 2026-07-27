@@ -364,12 +364,12 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Achievements 0.2.0 — Technical Backlog Closeout",
+        "Achievements 0.2.1 — Developer Reset And Predicate Fixes",
         "`codex/backlog-technical-closeout`",
         "pull/14",
         "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
         "Blender 5.0.1/5.1.2/5.2.0",
-        "`reports/extension/achievements-0.2.0.zip`",
+        "`reports/extension/achievements-0.2.1.zip`",
         "`SCHEMA_VERSION = \"1.0.0\"`",
         "ADR 0002",
         "exact 65-ID/85-pair catalog bijection",
@@ -404,7 +404,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     assert data["schema_version"] == "1.0.0"
     assert data["id"] == "achievements"
-    assert data["version"] == "0.2.0"
+    assert data["version"] == "0.2.1"
     assert data["name"] == "Achievements"
     assert data["type"] == "add-on"
     assert data["blender_version_min"] == "5.0.0"
@@ -436,7 +436,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     )
     assert result.returncode == 0, result.stdout
     assert "Achievements" in result.stdout
-    assert "(0, 2, 0)" in result.stdout
+    assert "(0, 2, 1)" in result.stdout
     assert "(5, 0, 0)" in result.stdout
     assert "Blender 5.0.1" in result.stdout
     assert "Blender 5.1.2" in result.stdout
@@ -695,7 +695,7 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "9 lessons" in stale_catalog_reference
 
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
-    assert "Achievements 0.2.0 candidate" in packaging_release
+    assert "Achievements 0.2.1 candidate" in packaging_release
     assert "scripts/build_extension.py" in packaging_release
     assert "reports/extension-validation/<run-id>/blender-5.1.2/source" in packaging_release
     assert "release package excludes docs/tests/plugins/scripts" in packaging_release

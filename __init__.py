@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Achievements",
     "author": "axximus",
-    "version": (0, 2, 0),
+    "version": (0, 2, 1),
     "blender": (5, 0, 0),
     "location": "3D Viewport > Header (trophy icon)",
     "description": "Gamification addon: 105 achievements, XP & levels, rewards, tutorials",
@@ -21,10 +21,10 @@ from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
 
 # ============================================================
-#  ACHIEVEMENTS ADDON — v0.2 (release candidate)
+#  ACHIEVEMENTS ADDON — v0.2.1 (release candidate)
 #  Blender 5.0 / 5.1 / 5.2
 #
-#  v0.2:
+#  v0.2.1:
 #  - 105 achievements across 5 categories
 #  - XP & Level system (10 levels)
 #  - Difficulty labels (easy/medium/hard) on cards
@@ -497,7 +497,7 @@ def _unlock_achievement(aid, ach):
 #  COMPLEX ACHIEVEMENT CHECKING (scene state)
 # =============================================
 
-def _check_complex_step(complex_id, step_check, scene):
+def _check_complex_step(complex_id, step_check, scene, event=None):
     """Evaluate one complex step through the pure predicate registry."""
     import datetime
 
@@ -511,6 +511,7 @@ def _check_complex_step(complex_id, step_check, scene):
                 now=datetime.datetime.now(),
                 timestamp=time.time(),
             ),
+            event=event,
         )
         result = ach_predicates.evaluate_predicate(complex_id, step_check, context)
         if result.error:
@@ -527,19 +528,24 @@ def _check_complex_step(complex_id, step_check, scene):
         return False
 
 
-def _check_complex(complex_id, scene):
+def _check_complex(complex_id, scene, event=None):
     """Check if ALL steps of a complex achievement are complete."""
     ach = next((a for a in ACHIEVEMENTS_DEF if a.get("complex_id") == complex_id), None)
     if not ach:
         return False
     result = ach_engine.evaluate_complex_achievement(
         ach,
-        lambda cid, step_check: _check_complex_step(cid, step_check, scene),
+        lambda cid, step_check: _check_complex_step(
+            cid,
+            step_check,
+            scene,
+            event=event,
+        ),
     )
     return result.achieved
 
 
-def check_complex_achievements(scene=None):
+def check_complex_achievements(scene=None, event=None):
     """Check all complex achievements for completion."""
     if scene is None:
         scene = bpy.context.scene
@@ -553,7 +559,7 @@ def check_complex_achievements(scene=None):
         if ach.get("complex_id") == "first_render":
             # Still check — it will pass once renders_completed > 0
             pass
-        if _check_complex(ach["complex_id"], scene):
+        if _check_complex(ach["complex_id"], scene, event=event):
             _unlock_achievement(aid, ach)
 
 
@@ -662,8 +668,9 @@ def on_render_complete(dummy=None):
     stats.renders_completed += 1
     _on_user_activity()  # render is active work
 
+    scene = dummy if hasattr(dummy, "render") else bpy.context.scene
+
     if "first_render" not in stats.unlocked:
-        scene = bpy.context.scene
         has_mesh_with_mat = False
         has_light = False
         for obj in scene.objects:
@@ -677,7 +684,7 @@ def on_render_complete(dummy=None):
                 _unlock_achievement("first_render", ach)
 
     # Also check other complex achievements after render
-    check_complex_achievements()
+    check_complex_achievements(scene, event="render_complete")
     save_data()
 
 
@@ -1151,6 +1158,65 @@ class ACH_OT_ResetAchievements(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def _extension_management_target(context):
+    """Resolve this installed extension against Blender's enabled user repos."""
+    try:
+        repositories = tuple(
+            ach_ui.ExtensionRepositorySpec(
+                module=repository.module,
+                directory=repository.directory,
+                source=repository.source,
+                enabled=repository.enabled,
+            )
+            for repository in context.preferences.extensions.repos
+        )
+        return ach_ui.resolve_extension_management_target(
+            __package__,
+            __file__,
+            repositories,
+        )
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+        return None
+
+
+class ACH_OT_OpenExtensionManager(bpy.types.Operator):
+    """Open Blender's native extension card for safe removal."""
+
+    bl_idname = "ach.open_extension_manager"
+    bl_label = "Удалить аддон…"
+    bl_description = (
+        "Открыть штатный раздел Extensions; удаление выполняется кнопкой "
+        "Uninstall в Blender"
+    )
+    bl_options = {'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return _extension_management_target(context) is not None
+
+    def execute(self, context):
+        if _extension_management_target(context) is None:
+            self.report({'ERROR'}, "Аддон не установлен как Blender Extension")
+            return {'CANCELLED'}
+
+        preferences = context.preferences
+        window_manager = context.window_manager
+        if not bpy.ops.screen.userpref_show.poll():
+            self.report({'ERROR'}, "Blender Preferences недоступны в текущем контексте")
+            return {'CANCELLED'}
+        preferences.active_section = 'EXTENSIONS'
+        window_manager.extension_type = 'ADDON'
+        window_manager.extension_show_panel_installed = True
+        window_manager.extension_show_panel_available = False
+        if hasattr(window_manager, "extension_use_filter"):
+            window_manager.extension_use_filter = False
+        if hasattr(window_manager, "extension_tags"):
+            window_manager.extension_tags.clear()
+        window_manager.extension_search = bl_info["name"]
+        bpy.ops.screen.userpref_show('INVOKE_DEFAULT', section='EXTENSIONS')
+        return {'FINISHED'}
+
+
 # =============================================
 #  MAIN DIALOG
 # =============================================
@@ -1202,6 +1268,19 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
         # Reset progress (testing/dev) — confirmation handled by the operator
         reset_row = sbox.row(align=True)
         reset_row.operator("ach.reset_achievements", text="Сбросить прогресс", icon="TRASH")
+
+        # Extension removal is completed by Blender after this add-on returns.
+        manage_row = sbox.row(align=True)
+        manage_row.enabled = _extension_management_target(context) is not None
+        manage_row.operator(
+            "ach.open_extension_manager",
+            text="Удалить аддон…",
+            icon="PREFERENCES",
+        )
+        if manage_row.enabled:
+            manage_row.label(text="Завершите Uninstall в Extensions; прогресс сохранится")
+        else:
+            manage_row.label(text="Доступно после установки ZIP-расширения")
 
         # Tab buttons
         row = layout.row(align=True)
@@ -1332,6 +1411,7 @@ _classes = (
     ACH_OT_PagePrev,
     ACH_OT_PageNext,
     ACH_OT_ResetAchievements,
+    ACH_OT_OpenExtensionManager,
     ACH_OT_AchievementsDialog,
 )
 
@@ -1440,7 +1520,7 @@ def register():
     _register_draw_handlers()
     _addon_registered = True
 
-    print("[Achievements] v0.2 — registered! (105 achievements + XP)")
+    print("[Achievements] v0.2.1 — registered! (105 achievements + XP)")
     print(f"[Achievements] Data: {DATA_FILE}")
 
 
@@ -1455,7 +1535,7 @@ def unregister():
     ach_lifecycle.unregister_classes(bpy, _classes)
     _unregister_scene_properties()
     _addon_registered = False
-    print("[Achievements] v0.2 — unregistered")
+    print("[Achievements] v0.2.1 — unregistered")
 
 
 if __name__ == "__main__":

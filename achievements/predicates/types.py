@@ -53,6 +53,7 @@ class PredicateContext:
     view_layer: Any
     stats: StatsSnapshot
     clock: ClockSnapshot
+    event: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

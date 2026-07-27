@@ -227,7 +227,7 @@ def test_extension_runner_uses_one_disposable_isolated_profile(tmp_path):
     )
     outputs = {
         "validate": 'Success parsing TOML in "source"\n',
-        "build": 'building: achievements-0.2.0.zip\ncomplete\ncreated: "candidate.zip"\n',
+        "build": 'building: achievements-0.2.1.zip\ncomplete\ncreated: "candidate.zip"\n',
         "server-generate": "found 1 packages.\n",
     }
     calls = []
@@ -358,7 +358,7 @@ def write_minimal_payload(root: Path, *, line_ending: bytes = b"\n") -> None:
     root.mkdir(parents=True)
     package = root / "achievements"
     package.mkdir()
-    (root / "blender_manifest.toml").write_bytes(b'version = "0.2.0"' + line_ending)
+    (root / "blender_manifest.toml").write_bytes(b'version = "0.2.1"' + line_ending)
     (root / "LICENSE").write_bytes(b"GNU GPL v3" + line_ending)
     (root / "__init__.py").write_bytes(b"ROOT = True" + line_ending)
     (package / "__init__.py").write_bytes(b"PACKAGE = True" + line_ending)

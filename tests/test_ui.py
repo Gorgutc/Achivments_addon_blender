@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -163,3 +165,93 @@ def test_long_ru_and_en_text_is_budgeted_for_cards_and_overlays():
     assert len(ui.card_description_text(long_en)) <= ui.CARD_DESCRIPTION_MAX_CHARS
     assert len(ui.overlay_title_text(long_ru)) <= ui.OVERLAY_TITLE_MAX_CHARS
     assert len(ui.overlay_description_text(long_en)) <= ui.OVERLAY_DESCRIPTION_MAX_CHARS
+
+
+@pytest.mark.parametrize(
+    ("module_name", "expected"),
+    [
+        ("bl_ext.user_default.achievements", "bl_ext.user_default.achievements"),
+        ("bl_ext.local_repo.achievements", "bl_ext.local_repo.achievements"),
+        ("achievements", None),
+        ("bl_ext.achievements", None),
+        ("bl_ext..achievements", None),
+        ("bl_ext.user_default.other", None),
+        (None, None),
+    ],
+)
+def test_extension_management_module_fails_closed(module_name, expected):
+    from achievements import ui
+
+    assert ui.extension_management_module(module_name) == expected
+
+
+def test_extension_management_target_requires_one_matching_user_repo(tmp_path):
+    from achievements import ui
+
+    repo_dir = tmp_path / "repo"
+    package_dir = repo_dir / "achievements"
+    package_dir.mkdir(parents=True)
+    module_file = package_dir / "__init__.py"
+    module_file.write_text("", encoding="utf-8")
+    matching = ui.ExtensionRepositorySpec(
+        module="user_default",
+        directory=str(repo_dir),
+        source="USER",
+        enabled=True,
+    )
+
+    expected = ui.ExtensionManagementTarget(
+        module_name="bl_ext.user_default.achievements",
+        repo_directory=str(repo_dir.resolve()),
+        package_id="achievements",
+    )
+    assert ui.resolve_extension_management_target(
+        "bl_ext.user_default.achievements",
+        str(module_file),
+        (matching,),
+    ) == expected
+
+    assert ui.resolve_extension_management_target(
+        "bl_ext.user_default.achievements",
+        str(module_file),
+        (matching, matching),
+    ) is None
+    assert ui.resolve_extension_management_target(
+        "bl_ext.user_default.achievements",
+        str(module_file),
+        (
+            ui.ExtensionRepositorySpec(
+                module="user_default",
+                directory=str(repo_dir),
+                source="SYSTEM",
+                enabled=True,
+            ),
+        ),
+    ) is None
+    assert ui.resolve_extension_management_target(
+        "bl_ext.user_default.achievements",
+        str(module_file),
+        (
+            ui.ExtensionRepositorySpec(
+                module="user_default",
+                directory=str(repo_dir),
+                source="USER",
+                enabled=False,
+            ),
+        ),
+    ) is None
+
+    other_repo = tmp_path / "other-repo"
+    (other_repo / "achievements").mkdir(parents=True)
+    assert ui.resolve_extension_management_target(
+        "bl_ext.user_default.achievements",
+        str(module_file),
+        (
+            ui.ExtensionRepositorySpec(
+                module="user_default",
+                directory=str(other_repo),
+                source="USER",
+                enabled=True,
+            ),
+        ),
+    ) is None

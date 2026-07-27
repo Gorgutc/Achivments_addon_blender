@@ -1,6 +1,6 @@
 # Packaging And Release
 
-Release packaging produces the Achievements 0.2.0 candidate from one canonical runtime.
+Release packaging produces the Achievements 0.2.1 candidate from one canonical runtime.
 
 The extension manifest is `blender_manifest.toml`. Blender registration lives in root `__init__.py`; `achievements/` contains runtime support modules. ADR 0002 retired `achievements_v01 (4).py`, and verification rejects any second runtime copy.
 
@@ -20,8 +20,9 @@ The release package excludes docs/tests/plugins/scripts, GitHub workflow files, 
 - `achievements/`
 
 The audited ZIP is deliberately published at
-`reports/extension/achievements-0.2.0.zip`. `reports/` is ignored and remains
+`reports/extension/achievements-0.2.1.zip`. `reports/` is ignored and remains
 generated local output.
+The prior `achievements-0.2.0.zip` candidate is immutable evidence and must not be overwritten.
 
 ## Commands
 
@@ -60,13 +61,13 @@ execution; the helper rejects stale ZIP/index entries and never deletes or
 mixes an older baseline implicitly.
 
 The default `reports/extension/` directory is unsuitable for a server gate while
-its `achievements-0.1.0.zip` baseline is present. After all version-specific
+older canonical ZIPs are present. After all version-specific
 build gates pass, audit allowlist, member digests, Git bytes, SHA-256, and size
 in the fresh outputs. Then select one exact audited artifact, freeze its
 SHA-256/member digests, and deliberately byte-copy
 that same
-`achievements-0.2.0.zip` to
-`reports/extension/achievements-0.2.0.zip`. This publication copy is separate
+`achievements-0.2.1.zip` to
+`reports/extension/achievements-0.2.1.zip`. This publication copy is separate
 from the helper: never rebuild or overwrite the canonical ZIP, and never delete
 or mix an existing baseline implicitly. The canonical destination must not
 already exist; verify identical source/destination SHA-256.
@@ -75,8 +76,8 @@ After recording and comparing the audited hashes, the deliberate Windows copy
 is:
 
 ```powershell
-$verifiedZip = "reports/extension-validation/<run-id>/blender-5.2.0/achievements-0.2.0.zip"
-$canonicalZip = "reports/extension/achievements-0.2.0.zip"
+$verifiedZip = "reports/extension-validation/<run-id>/blender-5.2.0/achievements-0.2.1.zip"
+$canonicalZip = "reports/extension/achievements-0.2.1.zip"
 if (Test-Path -LiteralPath $canonicalZip) { throw "Canonical candidate already exists" }
 Copy-Item -LiteralPath $verifiedZip -Destination $canonicalZip
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $verifiedZip).Hash -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $canonicalZip).Hash) { throw "Published candidate hash mismatch" }

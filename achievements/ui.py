@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 GRID_COLS = 2
@@ -39,6 +40,8 @@ CARD_TITLE_MAX_CHARS = 48
 CARD_DESCRIPTION_MAX_CHARS = 64
 OVERLAY_TITLE_MAX_CHARS = 34
 OVERLAY_DESCRIPTION_MAX_CHARS = 42
+EXTENSION_MODULE_PREFIX = "bl_ext"
+EXTENSION_PACKAGE_ID = "achievements"
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,86 @@ class OverlayFrame:
     icon_rect: tuple[float, float, int, int]
     text_x: float
     progress_bar_width: float
+
+
+@dataclass(frozen=True)
+class ExtensionRepositorySpec:
+    module: str
+    directory: str
+    source: str
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class ExtensionManagementTarget:
+    module_name: str
+    repo_directory: str
+    package_id: str
+
+
+def extension_management_module(
+    module_name: str | None,
+    *,
+    package_id: str = EXTENSION_PACKAGE_ID,
+) -> str | None:
+    """Return an exact Blender extension module name or fail closed."""
+    if not module_name:
+        return None
+    parts = module_name.split(".")
+    if (
+        len(parts) != 3
+        or parts[0] != EXTENSION_MODULE_PREFIX
+        or not parts[1]
+        or parts[2] != package_id
+    ):
+        return None
+    return module_name
+
+
+def resolve_extension_management_target(
+    module_name: str | None,
+    module_file: str,
+    repositories: tuple[ExtensionRepositorySpec, ...],
+    *,
+    package_id: str = EXTENSION_PACKAGE_ID,
+) -> ExtensionManagementTarget | None:
+    """Resolve one installed user extension without guessing its repository."""
+    validated_module = extension_management_module(
+        module_name,
+        package_id=package_id,
+    )
+    if validated_module is None:
+        return None
+
+    repo_module = validated_module.split(".")[1]
+    matches = tuple(
+        repository
+        for repository in repositories
+        if repository.module == repo_module
+        and repository.enabled
+        and repository.source == "USER"
+    )
+    if len(matches) != 1:
+        return None
+
+    repository = matches[0]
+    try:
+        module_directory = Path(module_file).resolve(strict=True).parent
+        package_directory = (
+            Path(repository.directory).resolve(strict=True) / package_id
+        )
+        if not package_directory.is_dir() or not module_directory.samefile(
+            package_directory
+        ):
+            return None
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+    return ExtensionManagementTarget(
+        module_name=validated_module,
+        repo_directory=str(Path(repository.directory).resolve(strict=True)),
+        package_id=package_id,
+    )
 
 
 TABS = (

@@ -35,9 +35,9 @@ Release packaging:
 - Give every `server-generate` gate a fresh, never-used per-run output directory
   with a new `<run-id>`. The helper rejects stale ZIP/index entries and never
   deletes an older baseline.
-- The default `reports/extension/` is not a server-gate workspace while its
-  `achievements-0.1.0.zip` baseline is present. Audit a candidate from a fresh
-  output first, then select one exact verified `achievements-0.2.0.zip` and
+- The default `reports/extension/` is not a server-gate workspace while older
+  canonical ZIPs are present. Audit a candidate from a fresh
+  output first, then select one exact verified `achievements-0.2.1.zip` and
   deliberately byte-copy it to the canonical directory. The destination must
   not already exist; verify identical source/destination SHA-256 and never
   rebuild or overwrite the canonical ZIP.

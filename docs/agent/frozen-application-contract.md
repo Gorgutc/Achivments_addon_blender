@@ -18,7 +18,7 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 - Add-on name: `Achievements`.
 - Author: `axximus`.
-- Version: `(0, 2, 0)`.
+- Version: `(0, 2, 1)`.
 - Minimum `bl_info["blender"]`: `(5, 0, 0)`.
 - Location: `3D Viewport > Header (trophy icon)`.
 - Category: `Interface`.
@@ -135,6 +135,9 @@ Global layout:
 - Popup width, tab specs, pagination plans, Scene property specs, overlay frame geometry, storage filters, and reward labels are planned by pure `achievements/ui.py`; root `__init__.py` remains the Blender layout/GPU adapter.
 - Grid is 2 columns by 5 rows, 10 cards per page.
 - The stats box exposes a `Сбросить прогресс` button (`ach.reset_achievements`) that fully resets the profile after a confirmation dialog; this is an explicit testing/dev affordance.
+- The stats box also exposes `Удалить аддон…` (`ach.open_extension_manager`); the action is enabled only when the runtime resolves exactly one enabled user extension repository and the executing package path matches `bl_ext.<repo>.achievements`. It opens Blender's filtered native `Extensions` card; Blender owns the final `Uninstall` action.
+- Extension removal never deletes `~/BlenderAchievements/`. Reset and uninstall remain separate actions.
+- Add-on-owned operators must never call `extensions.package_uninstall`, manually delete their source tree, or use legacy `preferences.addon_remove`. Removing the executing module from its own Python operator is crash-prone on supported Blender versions.
 - Cards are horizontal: icon on the left, text and actions on the right.
 - Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
 - Card width is `_CARD_W = 15.6`.
@@ -194,7 +197,7 @@ Do not replace GPU overlay behavior with panel-only UI unless explicitly request
 ## Runtime Lifecycle
 
 Registration registers:
-- Eight operator classes.
+- Nine operator classes.
 - `bpy.types.Scene` tab/page/accordion properties.
 - `depsgraph_update_post`, `load_post`, `save_pre`, and `render_complete` handlers.
 - `_timer_tick` and `_notification_redraw_tick` timers.
@@ -234,6 +237,7 @@ Achievement checking:
 - `_check_complex`
 - `check_complex_achievements`
 - `_get_mesh_counts`
+- `_extension_management_target`
 
 Blender handlers and timers:
 - `on_depsgraph_update`
@@ -255,6 +259,7 @@ Operators:
 - `ACH_OT_PagePrev`
 - `ACH_OT_PageNext`
 - `ACH_OT_ResetAchievements`
+- `ACH_OT_OpenExtensionManager`
 - `ACH_OT_AchievementsDialog`
 
 UI helpers:
@@ -297,6 +302,7 @@ Before editing add-on behavior:
 - Blender `register` smoke freezes registration cleanup.
 - Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
-- Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers.
+- Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers. It also proves factory defaults do not unlock `subsurface_skin` or `denoiser_render`, Subsurface uses only its exact Weight input, and denoiser evaluation is transiently gated to a completed Cycles render for the handler-supplied scene.
+- Release acceptance proves the installed extension-management route on all supported Blender versions and performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
 - Blender `ui_visual` smoke freezes UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

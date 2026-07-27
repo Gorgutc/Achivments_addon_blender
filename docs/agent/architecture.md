@@ -23,3 +23,5 @@ Frozen source facts:
 - Full frozen application contract: `docs/agent/frozen-application-contract.md`.
 
 The 0.2.0 technical closeout aligns `bl_info` with Blender 5.0+, removes stale 100-achievement runtime strings, and preserves catalog IDs, persistence schema, Blender public surfaces, UI layout, and reward fallbacks. Real content assets, tutorial URLs, production cloud, and remaining UI/GPU decomposition are separate epics.
+
+The 0.2.1 maintenance slice adds crash-safe navigation to Blender-owned extension removal, keeps user progress outside the extension lifecycle, corrects Subsurface Weight detection, and makes denoiser completion an explicit render event. Persistence schema and all 105 catalog IDs remain unchanged.

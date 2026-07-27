@@ -1,4 +1,4 @@
-# Achievements Addon v0.2 — Руководство разработчика
+# Achievements Addon v0.2.1 — Руководство разработчика
 
 Аддон геймификации для Blender 5.0+.
 Поддерживаемый минимум — Blender 5.0; blocking-проверки выполняются на Blender 5.0.1, 5.1.2 и 5.2.0.
@@ -18,7 +18,7 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 
 ### Вариант 1 — ZIP
 1. `Edit → Preferences → Add-ons → Install from Disk...`
-2. Выбрать `reports/extension/achievements-0.2.0.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
+2. Выбрать `reports/extension/achievements-0.2.1.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
 3. Включить галочку «Achievements»
 
 ### Вариант 2 — Локальная проверка из рабочей папки
@@ -48,6 +48,15 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 > Данные переживают переустановку Blender.
 > Удаляются только при ручном удалении папки `~/BlenderAchievements/`.
 > `achievements_data.json` хранится в текущей schema `1.0.0`; старый JSON мигрируется автоматически, а поврежденный JSON переносится рядом как `achievements_data.json.corrupt*`.
+
+## Сброс прогресса и удаление
+
+- `Сбросить прогресс` остаётся отдельной тестовой командой с подтверждением. Она обнуляет достижения, XP, статистику и состояние полученных наград, но не удаляет расширение или файлы `textures/` и `rewards/`.
+- `Удалить аддон…` доступно у установленного ZIP-расширения. Кнопка открывает отфильтрованную карточку `Achievements` в штатном разделе Blender `Extensions`; завершите действие через Blender-owned `Uninstall`.
+- Удаление расширения сохраняет `~/BlenderAchievements/`. Прогресс удаляется только отдельным подтверждённым сбросом или ручным удалением этого каталога.
+- Аддон намеренно не вызывает self-uninstall из собственного Python operator: Blender должен завершить disable/unregister/remove после возврата кода аддона.
+
+В версии 0.2.1 `Сквозь кожу` требует активный `Subsurface Weight > 0` (или подключённый weight-сокет), а `Чистый кадр` проверяется только после завершённого Cycles-рендера с включённым denoising. Обычный таймер, Eevee и настройки по умолчанию больше не разблокируют эти достижения.
 
 ---
 
@@ -100,11 +109,11 @@ Use a fresh, never-used per-run output directory for every `server-generate`
 gate: replace `<run-id>` on each rerun. The helper rejects pre-existing ZIPs or
 repository metadata and never deletes them.
 The default `reports/extension/` directory is therefore unsuitable for a
-server gate while its `achievements-0.1.0.zip` baseline is present. After all
+server gate while older canonical ZIPs are present. After all
 version-specific build gates and ZIP audits pass, select one exact verified
-`achievements-0.2.0.zip`, freeze its SHA-256/member digests, and deliberately
+`achievements-0.2.1.zip`, freeze its SHA-256/member digests, and deliberately
 byte-copy it from its fresh output to
-`reports/extension/achievements-0.2.0.zip`. The destination must not already
+`reports/extension/achievements-0.2.1.zip`. The destination must not already
 exist; verify identical source/destination SHA-256. Never rebuild
 or overwrite the canonical ZIP, and do not implicitly clean or replace the
 older baseline. Use that exact frozen canonical SHA for install/enable and
@@ -116,7 +125,7 @@ untracked runtime payload; working-tree mode LF-normalizes known UTF-8 runtime
 files.
 The helper refuses to clean or write a release source directory outside the generated `reports/` tree.
 
-The audited release package is deliberately published to `reports/extension/achievements-0.2.0.zip`. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
+The audited release package is deliberately published to `reports/extension/achievements-0.2.1.zip`. The immutable `achievements-0.2.0.zip` predecessor is not overwritten. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
 
 ---
 

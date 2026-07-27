@@ -24,9 +24,9 @@ Rules:
 - Give each `server-generate` run a fresh, never-used per-run output directory
   with a new `<run-id>`. Fail closed on stale ZIP/index entries; never delete or
   mix an older baseline implicitly.
-- `reports/extension/` is unsuitable for a server gate while its
-  `achievements-0.1.0.zip` baseline is present. Audit the ZIP in a fresh output
-  and only then select one exact verified 0.2.0 candidate and deliberately
+- `reports/extension/` is unsuitable for a server gate while older canonical
+  ZIPs are present. Audit the ZIP in a fresh output
+  and only then select one exact verified 0.2.1 candidate and deliberately
   byte-copy it to its canonical path. The destination must not already exist;
   confirm identical source/destination SHA-256 and never rebuild or overwrite
   the canonical ZIP.

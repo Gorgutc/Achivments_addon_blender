@@ -23,7 +23,9 @@ Known frozen facts:
 - Canonical active add-on file is `__init__.py`.
 - `achievements_v01 (4).py` was retired in the approved 0.2.0 technical closeout; ADR 0002 preserves its baseline blob, hashes, and recovery procedure. Do not reintroduce a second runtime without an explicit owner decision.
 - The add-on currently defines 105 achievements, 9 lessons, JSON persistence under `~/BlenderAchievements/`, handlers, timers, GPU draw UI, and reward loading from `.blend` assets.
-- Current add-on identity is 0.2.0 and `bl_info["blender"] == (5, 0, 0)`.
+- Current add-on identity is 0.2.1 and `bl_info["blender"] == (5, 0, 0)`.
+- Extension removal is routed through Blender's native `Extensions` UI; add-on-owned operators must not self-uninstall or delete `~/BlenderAchievements`.
+- `subsurface_skin` checks exact active Subsurface Weight, and `denoiser_render` requires a completed Cycles-render event.
 - Complex predicates live in pure `achievements/predicates/`; root `_check_complex_step` remains the Blender adapter.
 - Unlock hashes are local integrity markers. Current-schema missing or malformed markers must fail closed and must not be backfilled.
 
