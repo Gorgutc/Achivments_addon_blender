@@ -1,6 +1,6 @@
 # Frozen Application Contract
 
-This document freezes the current `main` behavior of the Achievements Blender add-on. Future edits must be narrow: change only the requested behavior and preserve every unrelated rule, UI decision, data shape, and lifecycle decision below unless the user explicitly asks to change it.
+This document freezes the active behavior of the Achievements Blender add-on. Future edits must be narrow: change only the requested behavior and preserve every unrelated rule, UI decision, data shape, and lifecycle decision below unless the user explicitly asks to change it.
 
 ## Source Of Truth
 
@@ -9,6 +9,7 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 - Offline sync planning source: `achievements/sync.py`.
 - Predicate source of truth: the exact registry under `achievements/predicates/`; root `_check_complex_step` is the Blender-facing adapter.
 - Integrity source of truth: `achievements/integrity.py`; root hash functions remain compatibility wrappers.
+- Extension loader and manifest permission decision: ADR 0004.
 - Retired duplicate: `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact Git recovery evidence.
 - Stale reference file: `docs/archive/achievements_100_list.md` preserves an older 100-achievement design byte-for-byte and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
@@ -18,11 +19,20 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 - Add-on name: `Achievements`.
 - Author: `axximus`.
-- Version: `(0, 2, 1)`.
+- Version: `(0, 2, 2)`.
 - Minimum `bl_info["blender"]`: `(5, 0, 0)`.
 - Location: `3D Viewport > Header (trophy icon)`.
 - Category: `Interface`.
 - Product concept: Blender gamification with achievements, XP/levels, rewards, tutorials, popups, and pinning.
+
+## Extension Loading And Permissions
+
+- Blender loads an installed build below the dynamic namespace `bl_ext.<repository>.achievements`.
+- Root `__init__.py` imports support modules through package-relative `.achievements` paths. Shipped runtime code must not add the extension directory to `sys.path` or depend on an ambient top-level `achievements` package.
+- Pure-Python tooling may arrange its own test import path outside Blender, but it must not weaken the shipped runtime contract.
+- `blender_manifest.toml` declares `[permissions].files` with the exact reason `Store progress and load local reward assets` for the existing per-user progress and reward paths.
+- The manifest does not request `network` permission. Production networking remains disabled.
+- These loader and permission rules do not change the payload allowlist, catalog, `SCHEMA_VERSION`, persistence keys, user-data location, reward fallbacks, or extension-removal behavior.
 
 ## Catalog Freeze
 
@@ -298,12 +308,12 @@ Before editing add-on behavior:
 
 ## Required Verification Coverage
 
-- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, strict predicate-registry bijection, duplicate absence/recovery evidence, archived-list Git blob, tracked-data safety, and this contract.
+- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, strict predicate-registry bijection, package-relative runtime imports, absence of runtime `sys.path` mutation, duplicate absence/recovery evidence, archived-list Git blob, tracked-data safety, and this contract.
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
 - Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
 - Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers. It also proves factory defaults do not unlock `subsurface_skin` or `denoiser_render`, Subsurface uses only its exact Weight input, and denoiser evaluation is transiently gated to a completed Cycles render for the handler-supplied scene.
-- Release acceptance proves the installed extension-management route on all supported Blender versions and performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
+- Release acceptance proves namespace-correct installed import, the exact manifest file permission without network permission, and the installed extension-management route on all supported Blender versions. It performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
 - Blender `ui_visual` smoke freezes UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

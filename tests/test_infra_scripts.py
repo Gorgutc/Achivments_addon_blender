@@ -83,7 +83,11 @@ def imported_names_from_catalog(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names = set()
     for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "achievements.catalog":
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 1
+            and node.module == "achievements.catalog"
+        ):
             names.update(alias.name for alias in node.names)
     return names
 
@@ -141,6 +145,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md" in result.stdout
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
+    assert "docs/agent/adrs/0004-extension-namespace-and-files-permission.md" in result.stdout
     assert "workflow exists: .github/workflows/fast-gate.yml" in result.stdout
     assert "workflow exists: .github/workflows/blender-smoke.yml" in result.stdout
 
@@ -216,6 +221,132 @@ def test_blender_smoke_dry_run_uses_temp_home_and_ui_visual_suite(tmp_path):
     assert "ACHIEVEMENTS_VISUAL_QA_DIR=" in result.stdout
 
 
+def test_blender_source_smoke_loaders_treat_root_runtime_as_a_package():
+    smoke_files = (
+        "smoke_register.py",
+        "smoke_lifecycle_stress.py",
+        "smoke_persistence.py",
+        "smoke_engine.py",
+        "smoke_rewards.py",
+        "smoke_ui_visual.py",
+    )
+    for filename in smoke_files:
+        text = (ROOT / "tests" / "blender" / filename).read_text(encoding="utf-8")
+        assert "submodule_search_locations=[str(ROOT)]" in text, filename
+
+
+def test_installed_extension_policy_runner_is_isolated_and_fail_closed(tmp_path):
+    env = {**os.environ, "BLENDER_BIN": str(fake_blender(tmp_path))}
+    result = run_script(
+        "scripts/run_installed_extension_policy.py",
+        "--dry-run",
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout
+    normalized = result.stdout.replace("\\", "/")
+    assert "extension" in normalized and "build" in normalized
+    assert "install-file" in normalized
+    assert "remove" in normalized
+    assert "user_default.achievements" in normalized
+    assert "tests/blender/smoke_extension_policy.py" in normalized
+    assert "HOME=" in result.stdout
+    assert "USERPROFILE=" in result.stdout
+    assert "BLENDER_USER_RESOURCES=" in result.stdout
+    assert "ACHIEVEMENTS_EXTENSION_MODULE=bl_ext.user_default.achievements" in result.stdout
+    assert "ACHIEVEMENTS_EXPECTED_EXTENSION_DIR=" in result.stdout
+    assert "ACHIEVEMENTS_POLICY_PHASE=installed" in result.stdout
+    assert "ACHIEVEMENTS_POLICY_PHASE=removed" in result.stdout
+
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import run_installed_extension_policy
+
+    pass_marker = "[smoke_extension_policy:PASS]"
+    assert run_installed_extension_policy.clean_result_code(0, pass_marker) == 0
+    assert (
+        run_installed_extension_policy.clean_result_code(
+            0,
+            f"Policy violation with sys.path\n{pass_marker}",
+            expected_marker=pass_marker,
+        )
+        == 1
+    )
+
+    data_root = tmp_path / "sentinel-home" / "BlenderAchievements"
+    baseline = run_installed_extension_policy.create_sentinels(data_root)
+    assert run_installed_extension_policy.sentinel_fingerprint(data_root) == baseline
+
+    runner_text = (ROOT / "scripts" / "run_installed_extension_policy.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'revision="HEAD"' in runner_text
+    assert "remove_command(blender, extension_id)" in runner_text
+    assert "[smoke_extension_policy:REMOVED_PASS]" in runner_text
+    assert "[installed-policy-runner:FAIL] temporary profile cleanup incomplete" in runner_text
+
+    probe_text = (ROOT / "tests" / "blender" / "smoke_extension_policy.py").read_text(
+        encoding="utf-8"
+    )
+    assert "if warning_map:" in probe_text
+    assert "module.unregister()" in probe_text
+    assert "module.register()" in probe_text
+    assert (
+        run_installed_extension_policy.clean_result_code(
+            0,
+            "Blender quit",
+            expected_marker=pass_marker,
+        )
+        == 1
+    )
+
+    exact_archive = tmp_path / "exact-achievements-0.2.2.zip"
+    exact_hash = "A" * 64
+    exact_result = run_script(
+        "scripts/run_installed_extension_policy.py",
+        "--dry-run",
+        "--archive",
+        str(exact_archive),
+        "--expected-sha256",
+        exact_hash,
+        env=env,
+    )
+    exact_output = exact_result.stdout.replace("\\", "/")
+    assert exact_result.returncode == 0, exact_result.stdout
+    assert str(exact_archive).replace("\\", "/") in exact_output
+    assert "--source-dir" not in exact_output
+    assert f"EXPECTED_ARCHIVE_SHA256={exact_hash}" in exact_result.stdout
+
+
+def test_shipped_runtime_stays_inside_blender_extension_import_namespace():
+    result = run_script("scripts/verify_frozen.py")
+    assert_clean_verifier(result)
+    assert "shipped runtime stays inside Blender extension import policy" in result.stdout
+
+    runtime_files = (
+        ROOT / "__init__.py",
+        *(ROOT / "achievements").rglob("*.py"),
+    )
+    for path in runtime_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                assert not any(alias.name == "sys" for alias in node.names), path
+                assert not any(
+                    alias.name == "achievements" or alias.name.startswith("achievements.")
+                    for alias in node.names
+                ), path
+            if isinstance(node, ast.ImportFrom) and node.level == 0:
+                module_name = node.module or ""
+                assert module_name != "sys"
+                assert module_name != "achievements"
+                assert not module_name.startswith("achievements.")
+            if isinstance(node, ast.Attribute):
+                attribute = ast.unparse(node)
+                assert attribute != "sys.path"
+                assert not attribute.startswith("sys.path.")
+
+
 def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
     fast_workflow = ROOT / ".github" / "workflows" / "fast-gate.yml"
     blender_workflow = ROOT / ".github" / "workflows" / "blender-smoke.yml"
@@ -263,6 +394,7 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "uv run python scripts/run_blender_smoke.py --suite engine",
         "uv run python scripts/run_blender_smoke.py --suite rewards",
         "uv run python scripts/run_blender_smoke.py --suite ui_visual",
+        "uv run python scripts/run_installed_extension_policy.py",
     ):
         assert phrase in blender_text
     for forbidden in (
@@ -364,14 +496,18 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Achievements 0.2.1 — Developer Reset And Predicate Fixes",
-        "`codex/backlog-technical-closeout`",
+        "Achievements 0.2.2 — Blender Extension Policy Compliance",
+        "`codex/extension-policy-022`",
+        "`main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`",
         "pull/14",
+        "PR #14 (`codex/backlog-technical-closeout`) is confirmed merged",
         "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
         "Blender 5.0.1/5.1.2/5.2.0",
-        "`reports/extension/achievements-0.2.1.zip`",
+        "`reports/extension/achievements-0.2.2.zip`",
         "`SCHEMA_VERSION = \"1.0.0\"`",
         "ADR 0002",
+        "ADR 0004",
+        "Store progress and load local reward assets",
         "exact 65-ID/85-pair catalog bijection",
         "full GPL-3.0-or-later `LICENSE`",
         "raw LF SHA-256 `9CB06CA4",
@@ -379,6 +515,8 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "219 referenced PNG files",
         "11 placeholder tutorial URLs",
         "20 reward `.blend` names",
+        "Owner Acceptance For 0.2.1",
+        "final Blender-owned `Uninstall` completed successfully",
         "Do not merge, tag, create a GitHub Release",
         "modify any `instance_matcher` information",
     ):
@@ -404,11 +542,15 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     assert data["schema_version"] == "1.0.0"
     assert data["id"] == "achievements"
-    assert data["version"] == "0.2.1"
+    assert data["version"] == "0.2.2"
     assert data["name"] == "Achievements"
     assert data["type"] == "add-on"
     assert data["blender_version_min"] == "5.0.0"
     assert data["license"] == ["SPDX:GPL-3.0-or-later"]
+    assert data["permissions"] == {
+        "files": "Store progress and load local reward assets"
+    }
+    assert "network" not in data["permissions"]
 
     home = tmp_path / "home"
     userprofile = tmp_path / "profile"
@@ -436,7 +578,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     )
     assert result.returncode == 0, result.stdout
     assert "Achievements" in result.stdout
-    assert "(0, 2, 1)" in result.stdout
+    assert "(0, 2, 2)" in result.stdout
     assert "(5, 0, 0)" in result.stdout
     assert "Blender 5.0.1" in result.stdout
     assert "Blender 5.1.2" in result.stdout
@@ -695,7 +837,7 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "9 lessons" in stale_catalog_reference
 
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
-    assert "Achievements 0.2.1 candidate" in packaging_release
+    assert "Achievements 0.2.2 candidate" in packaging_release
     assert "scripts/build_extension.py" in packaging_release
     assert "reports/extension-validation/<run-id>/blender-5.1.2/source" in packaging_release
     assert "release package excludes docs/tests/plugins/scripts" in packaging_release

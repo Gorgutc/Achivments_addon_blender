@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from achievements.engine import has_streak
-
+from ..engine import has_streak
 from .types import Predicate, PredicateContext, PredicateResult, SpeedModelReset
 
 

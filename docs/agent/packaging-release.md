@@ -1,8 +1,8 @@
 # Packaging And Release
 
-Release packaging produces the Achievements 0.2.1 candidate from one canonical runtime.
+Release packaging produces the Achievements 0.2.2 candidate from one canonical runtime.
 
-The extension manifest is `blender_manifest.toml`. Blender registration lives in root `__init__.py`; `achievements/` contains runtime support modules. ADR 0002 retired `achievements_v01 (4).py`, and verification rejects any second runtime copy.
+The extension manifest is `blender_manifest.toml`. Blender registration lives in root `__init__.py`; `achievements/` contains runtime support modules. Root imports those modules through package-relative paths inside Blender's installed extension namespace and never mutates `sys.path`. ADR 0002 retired `achievements_v01 (4).py`, and verification rejects any second runtime copy. ADR 0004 freezes the namespace and manifest permission policy.
 
 ## Release Payload
 
@@ -20,9 +20,15 @@ The release package excludes docs/tests/plugins/scripts, GitHub workflow files, 
 - `achievements/`
 
 The audited ZIP is deliberately published at
-`reports/extension/achievements-0.2.1.zip`. `reports/` is ignored and remains
+`reports/extension/achievements-0.2.2.zip`. `reports/` is ignored and remains
 generated local output.
-The prior `achievements-0.2.0.zip` candidate is immutable evidence and must not be overwritten.
+The prior `achievements-0.2.1.zip` and `achievements-0.2.0.zip` candidates are immutable evidence and must not be overwritten.
+
+The packaged manifest must contain exactly
+`files = "Store progress and load local reward assets"` under `[permissions]`.
+It must not request `network` permission while production networking is disabled.
+This declaration covers the existing progress and local reward-asset paths; it
+does not add content assets or expand the payload allowlist.
 
 ## Commands
 
@@ -66,8 +72,8 @@ build gates pass, audit allowlist, member digests, Git bytes, SHA-256, and size
 in the fresh outputs. Then select one exact audited artifact, freeze its
 SHA-256/member digests, and deliberately byte-copy
 that same
-`achievements-0.2.1.zip` to
-`reports/extension/achievements-0.2.1.zip`. This publication copy is separate
+`achievements-0.2.2.zip` to
+`reports/extension/achievements-0.2.2.zip`. This publication copy is separate
 from the helper: never rebuild or overwrite the canonical ZIP, and never delete
 or mix an existing baseline implicitly. The canonical destination must not
 already exist; verify identical source/destination SHA-256.
@@ -76,8 +82,8 @@ After recording and comparing the audited hashes, the deliberate Windows copy
 is:
 
 ```powershell
-$verifiedZip = "reports/extension-validation/<run-id>/blender-5.2.0/achievements-0.2.1.zip"
-$canonicalZip = "reports/extension/achievements-0.2.1.zip"
+$verifiedZip = "reports/extension-validation/<run-id>/blender-5.2.0/achievements-0.2.2.zip"
+$canonicalZip = "reports/extension/achievements-0.2.2.zip"
 if (Test-Path -LiteralPath $canonicalZip) { throw "Canonical candidate already exists" }
 Copy-Item -LiteralPath $verifiedZip -Destination $canonicalZip
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $verifiedZip).Hash -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $canonicalZip).Hash) { throw "Published candidate hash mismatch" }
@@ -103,5 +109,6 @@ Before shipping a release package:
 - Use the same exact frozen canonical SHA for those three install smokes;
   per-version self-built ZIPs are build evidence only.
 - Confirm the allowlist, absence of symlink/traversal/duplicates, Git-blob byte equality, member digests, final ZIP SHA-256, and byte size.
+- Confirm package-relative runtime imports, absence of runtime `sys.path` mutation, the exact manifest `files` reason, and absence of manifest `network` permission.
 - Run `/review`; if the slash command is unavailable, use `docs/agent/code-review.md` fallback.
 - A verified candidate does not authorize a tag, GitHub Release, or merge.

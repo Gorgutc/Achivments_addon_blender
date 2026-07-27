@@ -14,6 +14,8 @@ Frozen source facts:
 - Reward planning helper source: `achievements/rewards.py`.
 - UI contract and layout planning helper source: `achievements/ui.py`.
 - Offline sync planning helper source: `achievements/sync.py`.
+- Installed extension namespace: Blender loads the root as `bl_ext.<repository>.achievements`; root-to-support-module imports are package-relative and the runtime never mutates `sys.path`.
+- Manifest permissions: `blender_manifest.toml` declares only `files = "Store progress and load local reward assets"`; it does not request network access.
 - Legacy duplicate `achievements_v01 (4).py` was retired by ADR 0002; static verification requires one canonical runtime.
 - Achievement catalog: 105 achievements in `achievements/catalog.py`.
 - Lesson catalog: 9 lessons in `achievements/catalog.py`.
@@ -25,3 +27,5 @@ Frozen source facts:
 The 0.2.0 technical closeout aligns `bl_info` with Blender 5.0+, removes stale 100-achievement runtime strings, and preserves catalog IDs, persistence schema, Blender public surfaces, UI layout, and reward fallbacks. Real content assets, tutorial URLs, production cloud, and remaining UI/GPU decomposition are separate epics.
 
 The 0.2.1 maintenance slice adds crash-safe navigation to Blender-owned extension removal, keeps user progress outside the extension lifecycle, corrects Subsurface Weight detection, and makes denoiser completion an explicit render event. Persistence schema and all 105 catalog IDs remain unchanged.
+
+The 0.2.2 policy closeout keeps support imports inside Blender's installed extension namespace, removes the runtime `sys.path` alias, and declares the narrow file permission needed for local progress and reward assets. ADR 0004 records these loader and manifest boundaries. It does not change catalog, persistence, predicates, UI, reward fallbacks, or the disabled production-networking state.

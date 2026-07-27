@@ -51,6 +51,7 @@ REQUIRED_DOCS = [
     "docs/agent/adrs/0001-codex-infra-port.md",
     "docs/agent/adrs/0002-retire-legacy-runtime-duplicate.md",
     "docs/agent/adrs/0003-safe-extension-removal-and-render-events.md",
+    "docs/agent/adrs/0004-extension-namespace-and-files-permission.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
@@ -94,6 +95,7 @@ REQUIRED_INFRA_FILES = [
     "scripts/build_extension.py",
     "scripts/find_blender.py",
     "scripts/run_blender_smoke.py",
+    "scripts/run_installed_extension_policy.py",
     "scripts/verify_codex_plugin.py",
     "scripts/verify_frozen.py",
     "scripts/verify_predicates.py",
@@ -109,6 +111,7 @@ REQUIRED_INFRA_FILES = [
     "tests/test_sync.py",
     "tests/test_ui.py",
     "tests/blender/smoke_engine.py",
+    "tests/blender/smoke_extension_policy.py",
     "tests/blender/smoke_lifecycle_stress.py",
     "tests/blender/smoke_register.py",
     "tests/blender/smoke_persistence.py",
@@ -273,11 +276,21 @@ def verify_extension_contract() -> None:
     record("GPL-3.0-or-later license exists: LICENSE", license_file.is_file())
     if manifest.is_file():
         manifest_data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-        record("extension version is 0.2.1", manifest_data.get("version") == "0.2.1")
+        record("extension version is 0.2.2", manifest_data.get("version") == "0.2.2")
         record("extension minimum Blender is 5.0.0", manifest_data.get("blender_version_min") == "5.0.0")
         record(
             "extension manifest declares GPL-3.0-or-later",
             manifest_data.get("license") == ["SPDX:GPL-3.0-or-later"],
+        )
+        permissions = manifest_data.get("permissions")
+        record(
+            "extension files permission is exact and scoped",
+            permissions
+            == {"files": "Store progress and load local reward assets"},
+        )
+        record(
+            "extension manifest declares no network permission",
+            isinstance(permissions, dict) and "network" not in permissions,
         )
     if release_builder.is_file():
         builder_text = release_builder.read_text(encoding="utf-8")
