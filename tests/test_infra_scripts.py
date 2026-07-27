@@ -196,15 +196,12 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "contents: read",
         'python-version: "3.13"',
         "astral-sh/setup-uv@v5",
-        "blender-5-1-stable",
+        "blender-5-0-1",
+        "Blender5.0/blender-5.0.1-linux-x64.tar.xz",
+        "blender-5-1-2",
         "Blender5.1/blender-5.1.2-linux-x64.tar.xz",
-        "blender-5-2-alpha-canary",
-        "BLENDER_5_2_ALPHA_URL",
-        "continue-on-error: ${{ matrix.canary }}",
-        "id: install-blender",
-        "skip_smoke=true",
-        "Skipping optional Blender 5.2 alpha canary",
-        "if: steps.install-blender.outputs.skip_smoke != 'true'",
+        "blender-5-2-0",
+        "Blender5.2/blender-5.2.0-linux-x64.tar.xz",
         "BLENDER_BIN=",
         "uv run python scripts/run_blender_smoke.py --suite register",
         "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
@@ -214,8 +211,14 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "uv run python scripts/run_blender_smoke.py --suite ui_visual",
     ):
         assert phrase in blender_text
-    assert "canary: false" in blender_text
-    assert "canary: true" in blender_text
+    for forbidden in (
+        "continue-on-error",
+        "BLENDER_5_2_ALPHA_URL",
+        "matrix.canary",
+        "skip_smoke",
+        "Skipping optional",
+    ):
+        assert forbidden not in blender_text
 
 
 def test_iteration_plan_and_handoff_artifacts_are_present():
