@@ -25,6 +25,7 @@ This slice starts from completed 0.2.0 handoff head `98c84b5961e6b9957788ecc42c3
 - Kept `Сбросить прогресс` behavior and confirmation unchanged. It resets achievement/progress state but does not remove the extension or delete `textures/`/`rewards/` assets.
 - Added `Удалить аддон…`. It is enabled only when `bl_ext.<repo>.achievements` resolves to exactly one enabled USER repository and the executing package directory matches that repository.
 - The navigation operator checks Preferences availability, opens `section='EXTENSIONS'`, selects add-ons and installed packages, clears stale filters/tags, and searches for `Achievements`. Blender owns the final `Uninstall` action after add-on code returns.
+- Installed extensions may lose root `bl_info` after Blender consumes it. Runtime navigation therefore reads `achievements.metadata.ADDON_NAME`; the frozen verifier forbids later `bl_info` reads, and Blender register smoke removes `bl_info` before exercising the full success branch.
 - Prohibited add-on-owned `extensions.package_uninstall`, legacy `preferences.addon_remove`, and manual package deletion. Nested self-uninstall crashed isolated Blender 5.0.1/5.1.2/5.2.0 processes and is not part of normal verification.
 - Kept `~/BlenderAchievements/` outside package removal. External Blender-owned removal acceptance uses only disposable profiles and must prove sentinel data unchanged.
 - Fixed `subsurface_skin`: default-positive `Subsurface Scale`/`Subsurface IOR` no longer count; only exact active or linked `Subsurface Weight` (plus exact legacy `Subsurface`) matches.
@@ -35,37 +36,43 @@ This slice starts from completed 0.2.0 handoff head `98c84b5961e6b9957788ecc42c3
 
 ## Candidate Artifact
 
-- Planned canonical path: `reports/extension/achievements-0.2.1.zip`
-- Runtime source revision, SHA-256, size, member digests, and three-version install/removal evidence are pending the committed-revision release gate.
-- Existing `reports/extension/achievements-0.2.0.zip` remains immutable.
+- Canonical path: `reports/extension/achievements-0.2.1.zip`
+- Exact runtime source revision: `e179172705197da089ea04f709aaca3b38ad395b`.
+- SHA-256: `568E1595249CA2816E461BE5AA5FAD5687C686BACD613B5B0A72A7E8D5337D42`.
+- Size: `62,691` bytes; `22` regular allowlisted members; `237,719` uncompressed bytes.
+- Every member is byte-identical to the corresponding Git blob at the exact source revision. There are no symlinks, duplicate entries, path traversal, or unexpected files.
+- Blender 5.0.1/5.1.2/5.2.0 independently produced the same member digest map. The canonical byte stream is the Blender 5.2.0 build and remained unchanged through validation, repository generation, installation, probing, and removal checks on all three versions.
+- Existing `reports/extension/achievements-0.2.0.zip` remains immutable. The invalidated pre-fix 0.2.1 candidate remains recoverably quarantined under `reports/extension-invalid/` and is not installable delivery evidence.
 
 ## Remaining
 
-- Commit the implementation revision, run the full committed-revision fast/deep/release gates, and publish the new canonical ZIP without overwriting prior candidates.
-- Validate installed extension-management state and external Blender-owned removal on all three versions while preserving disposable-profile data sentinels.
-- Complete independent review, update this handoff with final SHA/evidence, push draft PR #14, then perform isolated Second Brain and append-only automatic-memory closeout.
+- Push the current 0.2.1 branch, including this refreshed handoff, to draft PR #14; observe its blocking checks and leave merge/tag/GitHub Release to a separate owner decision.
+- Complete isolated Second Brain and append-only automatic-memory closeout without changing any `instance_matcher` surface.
 - Owner-input epics stay open: 219 referenced PNG files, 11 placeholder tutorial URLs, 20 reward `.blend` names plus licenses, same-object/custom-origin/WIND behavior decisions, production cloud, and remaining UI/GPU decomposition.
 
 ## Verification
 
-Current pre-commit evidence:
+Committed-revision evidence:
 
-- `verify_frozen.py`: `41/41 PASS`.
-- `verify_predicates.py`: exact 65 IDs / 85 catalog pairs; no `bpy` imports.
-- Focused Ruff: PASS.
-- Focused pure tests after new exception coverage: `405 passed`.
-- Blender 5.1.2 `engine` and `register` smoke: PASS in disposable profiles, including handler-level denoiser propagation and the `EXTENSIONS` operator/property contract.
-- Full pytest, all six suites on all three versions, packaging, installed-navigation, external removal, ZIP hashes, and CI remain pending until the runtime revision is committed.
+- `verify_frozen.py`: `42/42 PASS`; `verify_codex_plugin.py`: `104/104 PASS`; exact predicate registry: 65 IDs / 85 catalog pairs with no `bpy` imports.
+- `ruff check .`: PASS; full `pytest`: `455 passed`.
+- All six Blender suites (`engine`, `lifecycle_stress`, `persistence`, `register`, `rewards`, `ui_visual`) passed on Blender 5.0.1, 5.1.2, and 5.2.0: `18/18 PASS` in disposable profiles.
+- `extension validate`, `extension build`, and `server-generate` passed on all three versions from exact committed Git blobs. The exact canonical ZIP then passed a second `validate` and fresh one-package `server-generate` on all three versions.
+- Fresh install/enable, installed-module identity, strict USER-repository resolution, installed Git-byte equality, native Extensions RNA, external Blender-owned removal, disabled/unimportable post-state, and data preservation passed on all three versions.
+- The installed lifecycle runner failed closed on non-zero exit, missing PASS markers, Python traceback, `NameError`, access violation, `WinError`, warning/error markers, or changed archive bytes; the final three-version run emitted none of those forbidden conditions.
+- Three sentinel files under each disposable `BlenderAchievements` directory retained exact size and SHA-256 across install, probe, removal, and post-removal probe. Real user progress was never addressed.
+- The unchanged reset operator was separately exercised on all three versions: dialog cancellation preserved exact runtime state, persisted JSON, assets, and backup bytes; confirmation wrote a fresh current-schema profile while preserving `textures/`, `rewards/`, and the corrupt-backup sentinel.
+- Headless Blender cannot open an interactive Preferences window (`screen.userpref_show.poll() == False`). The success branch is dynamically tested with loader-consumed `bl_info`, while real installed probes validate its target and native RNA; the final visible `Uninstall` click remains Blender-owned user interaction.
 
 ## Agents And Review
 
 - Persistent `requirements_guardian` maintains the ignored session ledger and checks scope, done work, and remaining gates.
 - Code/dead-code and component/instruction-drift/lookahead agents independently reproduced both false unlocks and the nested-uninstall crash on all supported versions.
-- Final verification-review and explicit `/review` fallback are pending release evidence.
+- Independent component/instruction and code/dead-code reviews closed with `Critical 0 / Important 0` after the loader-consumed `bl_info` regression test. The final verification-review and explicit `/review` fallback use the exact artifact evidence above.
 
 ## Blockers
 
-No current implementation blocker. The release artifact cannot be built in `--revision HEAD` mode until this complete runtime payload is committed. Any confirmed Critical/Important review finding must be fixed before that commit.
+No current implementation blocker. Merge, tag, and GitHub Release remain intentionally unauthorized.
 
 ## Residual Risks
 
@@ -76,4 +83,4 @@ No current implementation blocker. The release artifact cannot be built in `--re
 
 ## Next Start Prompt
 
-Continue Achievements 0.2.1 on `codex/backlog-technical-closeout` and draft PR #14. Read `AGENTS.md`, this handoff, ADR 0002, and ADR 0003. Finish every pending release gate, then replace pending artifact fields with exact committed revision/SHA/size evidence. Do not merge, tag, create a GitHub Release, touch real `~/BlenderAchievements`, overwrite the immutable 0.2.0 ZIP, or modify any `instance_matcher` information.
+Review Achievements 0.2.1 on `codex/backlog-technical-closeout` and draft PR #14. Read `AGENTS.md`, this handoff, ADR 0002, and ADR 0003. Confirm current CI/owner acceptance before any merge or version decision. Do not merge, tag, create a GitHub Release, touch real `~/BlenderAchievements`, overwrite the immutable 0.2.0 ZIP, or modify any `instance_matcher` information.
