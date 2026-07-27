@@ -138,6 +138,7 @@ Global layout:
 - The stats box also exposes `Удалить аддон…` (`ach.open_extension_manager`); the action is enabled only when the runtime resolves exactly one enabled user extension repository and the executing package path matches `bl_ext.<repo>.achievements`. It opens Blender's filtered native `Extensions` card; Blender owns the final `Uninstall` action.
 - Extension removal never deletes `~/BlenderAchievements/`. Reset and uninstall remain separate actions.
 - Add-on-owned operators must never call `extensions.package_uninstall`, manually delete their source tree, or use legacy `preferences.addon_remove`. Removing the executing module from its own Python operator is crash-prone on supported Blender versions.
+- Runtime code must not read root `bl_info` after import; Blender may consume it while loading an installed extension. Stable identity values come from `achievements.metadata`.
 - Cards are horizontal: icon on the left, text and actions on the right.
 - Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
 - Card width is `_CARD_W = 15.6`.

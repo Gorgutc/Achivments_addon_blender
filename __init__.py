@@ -116,6 +116,7 @@ from achievements import persistence as ach_persistence
 from achievements import predicates as ach_predicates
 from achievements import rewards as ach_rewards
 from achievements import ui as ach_ui
+from achievements import metadata as ach_metadata
 
 
 _REWARD_MANIFEST = ach_rewards.RewardManifest.from_achievements(ACHIEVEMENTS_DEF)
@@ -1212,7 +1213,7 @@ class ACH_OT_OpenExtensionManager(bpy.types.Operator):
             window_manager.extension_use_filter = False
         if hasattr(window_manager, "extension_tags"):
             window_manager.extension_tags.clear()
-        window_manager.extension_search = bl_info["name"]
+        window_manager.extension_search = ach_metadata.ADDON_NAME
         bpy.ops.screen.userpref_show('INVOKE_DEFAULT', section='EXTENSIONS')
         return {'FINISHED'}
 

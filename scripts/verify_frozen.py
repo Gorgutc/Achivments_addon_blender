@@ -347,6 +347,15 @@ def verify_addon_contract() -> None:
         "bl_info advertises 105 achievements",
         "105 achievements" in values["bl_info"].get("description", ""),
     )
+    record(
+        "runtime does not read loader-consumed bl_info",
+        not any(
+            isinstance(node, ast.Name)
+            and node.id == "bl_info"
+            and isinstance(node.ctx, ast.Load)
+            for node in ast.walk(module)
+        ),
+    )
     record("achievement count is 105", len(achievements) == 105, str(len(achievements)))
     record("lesson count is 9", len(lessons) == 9, str(len(lessons)))
     frozen_constants = {key: values[key] for key in FROZEN_CONSTANTS}

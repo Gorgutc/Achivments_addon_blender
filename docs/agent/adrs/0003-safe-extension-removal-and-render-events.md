@@ -11,6 +11,7 @@ Two complex predicates also treated passive Blender defaults as completed work. 
 ## Decision
 
 - `ach.open_extension_manager` is navigation only. It resolves the exact installed `bl_ext.<repo>.achievements` package against one enabled `USER` repository and a matching package directory, then opens Blender's `Extensions` section filtered to the installed `Achievements` card.
+- Runtime navigation reads the stable `achievements.metadata.ADDON_NAME`; it does not read root `bl_info` after import because Blender's extension loader may consume and remove that mapping.
 - Blender owns the final `Uninstall` action after add-on code returns. Add-on-owned operators never call `extensions.package_uninstall`, never use legacy `preferences.addon_remove`, and never delete package files manually.
 - Package removal preserves `~/BlenderAchievements/`. The existing confirmed `Сбросить прогресс` action remains separate and unchanged.
 - `subsurface_skin` accepts only an active or linked exact `Subsurface Weight` input, with the exact legacy `Subsurface` socket retained as a compatibility fallback.

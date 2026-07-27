@@ -4,6 +4,7 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import bpy
 
@@ -68,6 +69,79 @@ def header_callbacks():
     return list(callbacks)
 
 
+def exercise_extension_manager_execute(module) -> None:
+    calls = []
+
+    class FakeUserprefShow:
+        @staticmethod
+        def poll():
+            return True
+
+        def __call__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return {"FINISHED"}
+
+    class FakeTags:
+        cleared = False
+
+        def clear(self):
+            self.cleared = True
+
+    tags = FakeTags()
+    window_manager = SimpleNamespace(
+        extension_type="ALL",
+        extension_show_panel_installed=False,
+        extension_show_panel_available=True,
+        extension_use_filter=True,
+        extension_search="old filter",
+        extension_tags=tags,
+    )
+    preferences = SimpleNamespace(active_section="INTERFACE")
+    context = SimpleNamespace(
+        preferences=preferences,
+        window_manager=window_manager,
+    )
+    fake_bpy = SimpleNamespace(
+        ops=SimpleNamespace(
+            screen=SimpleNamespace(userpref_show=FakeUserprefShow()),
+        )
+    )
+    fake_operator = SimpleNamespace(report=lambda *_args, **_kwargs: None)
+    original_bpy = module.bpy
+    original_resolver = module._extension_management_target
+    missing = object()
+    original_bl_info = module.__dict__.pop("bl_info", missing)
+    if original_bl_info is missing or hasattr(module, "bl_info"):
+        fail("smoke could not reproduce loader-consumed bl_info")
+    try:
+        module.bpy = fake_bpy
+        module._extension_management_target = lambda _context: object()
+        result = module.ACH_OT_OpenExtensionManager.execute(fake_operator, context)
+    finally:
+        module.bpy = original_bpy
+        module._extension_management_target = original_resolver
+        module.bl_info = original_bl_info
+
+    if result != {"FINISHED"}:
+        fail(f"extension manager returned {result}")
+    if preferences.active_section != "EXTENSIONS":
+        fail("extension manager did not select Extensions preferences")
+    if window_manager.extension_type != "ADDON":
+        fail("extension manager did not filter add-ons")
+    if not window_manager.extension_show_panel_installed:
+        fail("extension manager did not show installed extensions")
+    if window_manager.extension_show_panel_available:
+        fail("extension manager did not hide available extensions")
+    if window_manager.extension_use_filter:
+        fail("extension manager did not clear advanced filters")
+    if window_manager.extension_search != "Achievements":
+        fail(f"extension manager search drifted: {window_manager.extension_search}")
+    if not tags.cleared:
+        fail("extension manager did not clear extension tags")
+    if calls != [(('INVOKE_DEFAULT',), {"section": "EXTENSIONS"})]:
+        fail(f"extension manager native call drifted: {calls}")
+
+
 def main() -> None:
     module = load_addon()
     data_dir = Path(module.DATA_DIR)
@@ -104,6 +178,7 @@ def main() -> None:
             "extension management properties missing: "
             f"{missing_extension_properties}"
         )
+    exercise_extension_manager_execute(module)
     missing_props = [prop for prop in scene_props(module) if not hasattr(bpy.types.Scene, prop)]
     if missing_props:
         fail(f"register did not create Scene props: {missing_props[:5]}")
