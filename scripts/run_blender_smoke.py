@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ SUITES = {
     "rewards": ROOT / "tests" / "blender" / "smoke_rewards.py",
     "ui_visual": ROOT / "tests" / "blender" / "smoke_ui_visual.py",
 }
+FAILURE_MARKERS = ("Traceback (most recent call last):", ":FAIL]")
 
 
 def build_command(blender: Path, suite: str) -> list[str]:
@@ -33,6 +35,15 @@ def smoke_env(temp_home: Path) -> dict[str, str]:
     env["ACHIEVEMENTS_ADDON_ROOT"] = str(ROOT)
     env["ACHIEVEMENTS_VISUAL_QA_DIR"] = str(Path(tempfile.gettempdir()) / "achievements-ui-visual-qa")
     return env
+
+
+def smoke_result_code(suite: str, process_code: int, output: str) -> int:
+    expected_pass = f"[smoke_{suite}:PASS]"
+    if process_code != 0:
+        return process_code
+    if expected_pass not in output or any(marker in output for marker in FAILURE_MARKERS):
+        return 1
+    return 0
 
 
 def main() -> int:
@@ -55,8 +66,8 @@ def main() -> int:
         print(f"ACHIEVEMENTS_VISUAL_QA_DIR={env['ACHIEVEMENTS_VISUAL_QA_DIR']}")
         return 0
 
-    with tempfile.TemporaryDirectory(prefix="achievements-blender-smoke-") as temp_dir:
-        temp_home = Path(temp_dir)
+    temp_home = Path(tempfile.mkdtemp(prefix="achievements-blender-smoke-"))
+    try:
         result = subprocess.run(
             command,
             cwd=ROOT,
@@ -67,8 +78,18 @@ def main() -> int:
             check=False,
             timeout=120,
         )
+    finally:
+        shutil.rmtree(temp_home, ignore_errors=True)
     print(result.stdout)
-    return result.returncode
+    return_code = smoke_result_code(args.suite, result.returncode, result.stdout)
+    if return_code != 0:
+        print(
+            f"[smoke-runner:FAIL] suite {args.suite} did not produce a clean "
+            f"[smoke_{args.suite}:PASS] marker"
+        )
+    if temp_home.exists():
+        print(f"[smoke-runner:WARN] temporary profile cleanup incomplete: {temp_home}")
+    return return_code
 
 
 if __name__ == "__main__":

@@ -5,8 +5,9 @@ This repository uses small Python tools rather than stack-wide package tooling f
 Authoritative commands:
 - `uv run python scripts/verify_frozen.py`
 - `uv run python scripts/verify_codex_plugin.py`
+- `uv run python scripts/verify_predicates.py`
 - `uv run python scripts/find_blender.py`
-- `uv run python scripts/build_extension.py --output-dir reports/extension --server-generate`
+- `uv run python scripts/build_extension.py --revision HEAD --source-dir reports/extension-validation/<run-id>/<version>/source --output-dir reports/extension-validation/<run-id>/<version> --server-generate --run-blender --blender "<path-to-that-blender>"`
 - `uv run python scripts/run_blender_smoke.py --suite register`
 - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress`
 - `uv run python scripts/run_blender_smoke.py --suite persistence`
@@ -18,15 +19,29 @@ Authoritative commands:
 
 GitHub Actions:
 - `.github/workflows/fast-gate.yml` mirrors `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
-- `.github/workflows/blender-smoke.yml` runs the Blender smoke suites on Python 3.13 with Blender 5.1 stable as the blocking target.
-- The Blender 5.2 alpha matrix entry is a canary and stays non-blocking through `continue-on-error`; its URL comes from repository variable `BLENDER_5_2_ALPHA_URL`.
-- When `BLENDER_5_2_ALPHA_URL` is unset, the canary skips rather than failing; configure the variable to get real Blender 5.2 smoke coverage.
+- `.github/workflows/blender-smoke.yml` runs all six Blender smoke suites on fixed blocking targets Blender 5.0.1, 5.1.2, and 5.2.0.
+- The Blender matrix has no repository URL variable, skipped row, canary, or `continue-on-error` target.
 
-`ruff check .` is configured for infrastructure code. The current add-on source and duplicate are excluded during this preparation phase because this task does not edit add-on code.
+`ruff check .` covers the runtime and infrastructure. Root `__init__.py` has only narrow bootstrap exceptions for `E402`/`I001`; pure modules receive the full configured rules. There is no duplicate-source exclusion.
 
 Hooks run fast static checks only. Blender smoke is intentionally reserved for manual deep and ship gates plus the dedicated Blender smoke workflow.
 
 Release packaging:
-- `scripts/build_extension.py` prepares `reports/extension/source` and prints the Blender extension validate/build/server-generate commands.
-- Run `blender --background --command extension validate`, `extension build`, and optional `extension server-generate` directly from the shell.
-- The release package excludes docs/tests/plugins/scripts, workflow files, generated reports, and `achievements_v01 (4).py`.
+- `scripts/build_extension.py --revision HEAD --run-blender` prepares a committed
+  Git-blob release source and executes Blender `extension validate`, `extension
+  build`, and optional `extension server-generate` with `--factory-startup`.
+- The wrapper uses one disposable profile with temporary `HOME`, `USERPROFILE`,
+  and `BLENDER_USER_RESOURCES`, and fails closed on unexpected output.
+- Give every `server-generate` gate a fresh, never-used per-run output directory
+  with a new `<run-id>`. The helper rejects stale ZIP/index entries and never
+  deletes an older baseline.
+- The default `reports/extension/` is not a server-gate workspace while older
+  canonical ZIPs are present. Audit a candidate from a fresh
+  output first, then select one exact verified `achievements-0.2.1.zip` and
+  deliberately byte-copy it to the canonical directory. The destination must
+  not already exist; verify identical source/destination SHA-256 and never
+  rebuild or overwrite the canonical ZIP.
+- Treat per-version self-built ZIPs as build evidence only. Use the same exact
+  frozen canonical SHA for install/enable and register/unregister smoke on all
+  three supported Blender versions.
+- Packaging tests freeze LF/CRLF behavior, dirty/untracked rejection, exact Git bytes, member allowlists, and repeatable member digests.

@@ -3,6 +3,7 @@
 Fast gate:
 - `uv run python scripts/verify_frozen.py`
 - `uv run python scripts/verify_codex_plugin.py`
+- `uv run python scripts/verify_predicates.py`
 - `uv run ruff check .`
 - `uv run pytest`
 
@@ -24,26 +25,46 @@ Deep Blender gate:
 
 GitHub Actions Blender smoke:
 - `.github/workflows/blender-smoke.yml` runs on pull requests, pushes to `main`, and manual `workflow_dispatch`.
-- `blender-5-1-stable` downloads Blender 5.1.2 from the official Blender 5.1 release path and is blocking.
-- `blender-5-2-alpha-canary` reads the download URL from repository variable `BLENDER_5_2_ALPHA_URL` and is non-blocking through `continue-on-error`.
-- If `BLENDER_5_2_ALPHA_URL` is empty, the optional canary skips its smoke steps without failing the workflow; this means no Blender 5.2 coverage was produced for that run.
-- Both matrix targets run the same smoke suites: `register`, `lifecycle_stress`, `persistence`, `engine`, `rewards`, and `ui_visual`.
+- Fixed blocking targets download Blender 5.0.1, 5.1.2, and 5.2.0 from official Blender release paths.
+- Every target runs `register`, `lifecycle_stress`, `persistence`, `engine`, `rewards`, and `ui_visual`; no target is skipped or non-blocking.
 - Blender smoke jobs set `BLENDER_BIN`; the smoke runner still creates temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` for each suite.
 
 Release packaging gate:
-- `uv run python scripts/build_extension.py --output-dir reports/extension --server-generate`
-- `blender --background --command extension validate reports/extension/source`
-- `blender --background --command extension build --source-dir reports/extension/source --output-dir reports/extension`
-- `blender --background --command extension server-generate --repo-dir reports/extension --html`
-- The release package excludes docs/tests/plugins/scripts, workflow files, generated reports, and `achievements_v01 (4).py`; inspect `reports/extension/achievements-0.1.0.zip` before shipping.
+- For each supported Blender version, use a fresh per-run repository directory:
+  `uv run python scripts/build_extension.py --revision HEAD --source-dir reports/extension-validation/<run-id>/<version>/source --output-dir reports/extension-validation/<run-id>/<version> --server-generate --run-blender --blender "<path-to-that-blender>"`.
+  Replace `<run-id>` on every rerun so the output is fresh and never-used.
+- The isolated wrapper executes `extension validate`, `extension build`, and
+  optional `extension server-generate` with `--factory-startup` and temporary
+  `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`. Require all requested
+  `[extension-cli:PASS]` markers and no traceback/error/warning output.
+- `[extension-cli:WARN]` is nonfatal helper cleanup telemetry but invalidates
+  release acceptance even when the helper exits zero. Resolve the residue and
+  rerun with a new `<run-id>`.
+- `server-generate` requires a fresh per-run output containing only its direct
+  staged `source/` before execution. The helper rejects stale ZIP/index entries
+  and never deletes an older baseline implicitly.
+- `reports/extension/` is unsuitable for a server gate while older canonical ZIPs
+  are present. After all version-specific build gates pass, select one exact
+  verified `achievements-0.2.1.zip`, freeze its SHA-256/member digests, and
+  deliberately byte-copy it from a fresh output to
+  `reports/extension/achievements-0.2.1.zip`. The destination must not already
+  exist; confirm identical source/destination SHA-256. Never rebuild or
+  overwrite the canonical ZIP, implicitly clean the canonical directory, or
+  replace the older baseline.
+- Per-version self-built ZIPs are build evidence only. Run install/enable and
+  register/unregister smoke on Blender 5.0.1, 5.1.2, and 5.2.0 against the same
+  exact frozen canonical SHA.
+- Inspect `reports/extension/achievements-0.2.1.zip`: only manifest, `LICENSE`, root runtime, and `achievements/` are allowed. Confirm Git-byte equality, no symlink/traversal/duplicate entries, member digests, final SHA-256, and size.
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.
 - Validate 105 achievements and 9 lessons.
 - Validate unique achievement, lesson, and complex IDs.
 - Validate category, stat key, difficulty, reward, and lesson references.
-- Validate complex ID coverage in `_check_complex_step`.
-- Validate duplicate file hash while the duplicate remains tracked.
+- Validate strict catalog `(complex_id, step_check)` to predicate-registry bijection.
+- Require `achievements_v01 (4).py` to be absent and preserve its recovery evidence in ADR 0002.
+- Validate version `0.2.1`, Blender minimum `(5, 0, 0)`, and 105-achievement active text.
+- Validate local integrity helpers and legacy-only missing-hash backfill without changing `SCHEMA_VERSION`.
 - Validate that real user progress files are not tracked.
 - Validate that sync helpers are present as tracked infra and covered by normal unit tests.
 
@@ -52,10 +73,12 @@ Blender smoke rules:
 - Use background mode and factory startup.
 - Verify register/unregister lifecycle and cleanup.
 - Verify repeated register/unregister stress cleanup and hot-reload idempotency.
-- Verify persistence schema, current `schema_version`, atomic save, hash migration, and corrupt JSON quarantine/recovery under a temporary profile.
+- Verify persistence schema, current `schema_version`, atomic save, legacy hash migration, current-schema missing/forged hash denial, and corrupt JSON quarantine/recovery under a temporary profile.
+- Verify factory defaults do not unlock `subsurface_skin` or `denoiser_render`, only exact active Subsurface Weight matches, and denoiser unlock requires the supplied completed Cycles-render scene.
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
 - Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
 - Verify UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
+- For a release candidate, run extension validate/build/server-generate plus ZIP install/enable, native extension-management routing, register/unregister, and external Blender-owned removal on Blender 5.0.1, 5.1.2, and 5.2.0. Removal must preserve a sentinel `~/BlenderAchievements/` tree in the disposable profile.
 
 Sync stub rules:
 - Normal sync tests run in `uv run pytest`; no Blender smoke is required while sync remains unwired to runtime.

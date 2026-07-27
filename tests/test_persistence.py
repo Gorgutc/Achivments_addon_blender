@@ -112,7 +112,7 @@ def test_invalid_payload_values_are_sanitized_and_deduplicated():
     assert normalized["stats"]["edges_created"] == 0
     assert normalized["stats"]["faces_created"] == 2
     assert normalized["unlocked"] == ["a", "b"]
-    assert normalized["unlock_hashes"] == {"a": "hash-a", "b": "22"}
+    assert normalized["unlock_hashes"] == {"b": "22"}
     assert normalized["rewards_claimed"] == ["reward_a", "reward_b"]
     assert normalized["pinned_ach_id"] == ""
     assert normalized["daily_sessions"] == ["2026-06-01", "2026-06-02"]
@@ -142,6 +142,41 @@ def test_payload_round_trip_from_stats_uses_current_schema():
     assert restored.rewards_claimed == {"first_vertex"}
     assert restored.pinned_ach_id == "first_vertex"
     assert restored.daily_sessions == ["2026-06-06"]
+
+
+def test_current_schema_missing_or_forged_hash_is_not_backfilled():
+    from achievements import persistence as ach_persistence
+
+    current = ach_persistence.default_payload()
+    current["unlocked"] = ["forged", "missing"]
+    current["unlock_hashes"] = {"forged": "not-a-valid-marker"}
+
+    normalized, report = ach_persistence.normalize_payload(
+        current, make_unlock_hash=hash_for
+    )
+
+    assert not report.migrated
+    assert normalized["unlock_hashes"] == {"forged": "not-a-valid-marker"}
+
+
+def test_integrity_marker_survives_persistence_round_trip_without_repair():
+    from achievements import persistence as ach_persistence
+    from achievements.integrity import make_unlock_hash
+
+    marker = make_unlock_hash("first_vertex", "junior")
+    stats = make_stats(
+        unlocked={"first_vertex"},
+        unlock_hashes={"first_vertex": marker},
+    )
+
+    payload = ach_persistence.payload_from_stats(stats)
+    restored = make_stats()
+    report = ach_persistence.apply_payload_to_stats(
+        restored, payload, make_unlock_hash=lambda achievement_id: "must-not-be-used"
+    )
+
+    assert not report.migrated
+    assert restored.unlock_hashes == {"first_vertex": marker}
 
 
 def test_atomic_write_uses_same_directory_replace_backup_and_leaves_no_temp_files(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import hashlib
 import re
 import subprocess
 import sys
@@ -12,9 +11,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 ADDON = ROOT / "__init__.py"
 DUPLICATE_ADDON = ROOT / "achievements_v01 (4).py"
+ARCHIVED_100_LIST = ROOT / "docs" / "archive" / "achievements_100_list.md"
+DUPLICATE_RETIREMENT_ADR = (
+    ROOT / "docs" / "agent" / "adrs" / "0002-retire-legacy-runtime-duplicate.md"
+)
 sys.path.insert(0, str(ROOT))
 
-from achievements import catalog  # noqa: E402
+from achievements import catalog, predicates  # noqa: E402
 
 USER_DATA_MARKERS = {"achievements_data.json", "BlenderAchievements"}
 VALID_CHECK_TYPES = {"stat", "complex"}
@@ -87,7 +90,6 @@ FROZEN_FUNCTIONS = {
     "_category_scene_properties",
     "_check_complex",
     "_check_complex_step",
-    "_check_streak",
     "_difficulty_label",
     "_draw_grid_page",
     "_draw_header_button",
@@ -95,9 +97,9 @@ FROZEN_FUNCTIONS = {
     "_draw_pinned_achievement",
     "_draw_rect",
     "_draw_unified_card",
-    "_ease_out_cubic",
     "_ensure_icons",
     "_ensure_data_dirs",
+    "_extension_management_target",
     "_flush_session_time",
     "_get_icon_id",
     "_get_mesh_counts",
@@ -140,6 +142,7 @@ FROZEN_CLASSES = {
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
     "ACH_OT_ResetAchievements",
+    "ACH_OT_OpenExtensionManager",
     "Stats",
 }
 FROZEN_REGISTER_CLASSES = {
@@ -151,6 +154,7 @@ FROZEN_REGISTER_CLASSES = {
     "ACH_OT_PagePrev",
     "ACH_OT_PinAchievement",
     "ACH_OT_ResetAchievements",
+    "ACH_OT_OpenExtensionManager",
 }
 ACHIEVEMENT_FIELDS = {
     "id",
@@ -232,12 +236,18 @@ def constant_assignments(module: ast.Module, names: set[str]) -> dict[str, Any]:
     return found
 
 
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def addon_tree() -> ast.Module:
     return ast.parse(ADDON.read_text(encoding="utf-8"))
+
+
+def attribute_path(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = attribute_path(node.value)
+        if parent:
+            return f"{parent}.{node.attr}"
+    return None
 
 
 def assignment_dict(module: ast.Module) -> dict[str, Any]:
@@ -273,50 +283,6 @@ def imports_catalog_definitions(module: ast.Module) -> bool:
         if isinstance(node, ast.ImportFrom) and node.module == "achievements.catalog":
             imported.update(alias.name for alias in node.names)
     return required <= imported
-
-
-def function_source(name: str) -> str:
-    text = ADDON.read_text(encoding="utf-8")
-    module = ast.parse(text)
-    lines = text.splitlines()
-    for node in module.body:
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return "\n".join(lines[node.lineno - 1 : node.end_lineno])
-    raise KeyError(name)
-
-
-def compare_name_to_string(test: ast.AST, name: str) -> str | None:
-    if not isinstance(test, ast.Compare) or len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
-        return None
-
-    left = test.left
-    right = test.comparators[0]
-    if isinstance(left, ast.Name) and left.id == name and isinstance(right, ast.Constant):
-        return right.value if isinstance(right.value, str) else None
-    if isinstance(right, ast.Name) and right.id == name and isinstance(left, ast.Constant):
-        return left.value if isinstance(left.value, str) else None
-    return None
-
-
-def complex_step_coverage() -> dict[str, set[str]]:
-    source = function_source("_check_complex_step")
-    module = ast.parse(source)
-    function = next(node for node in module.body if isinstance(node, ast.FunctionDef))
-    coverage: dict[str, set[str]] = {}
-    for node in ast.walk(function):
-        if not isinstance(node, ast.If):
-            continue
-        complex_id = compare_name_to_string(node.test, "complex_id")
-        if complex_id is None:
-            continue
-        steps: set[str] = set()
-        for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-            if isinstance(child, ast.If):
-                step = compare_name_to_string(child.test, "step_check")
-                if step is not None:
-                    steps.add(step)
-        coverage[complex_id] = steps
-    return coverage
 
 
 def registered_classes(module: ast.Module) -> set[str]:
@@ -375,7 +341,21 @@ def verify_addon_contract() -> None:
         catalog.catalog_digest(),
     )
     record("bl_info exists", values["bl_info"].get("name") == "Achievements")
-    record("bl_info current known drift preserved", values["bl_info"].get("blender") == (4, 5, 0))
+    record("bl_info version is 0.2.1", values["bl_info"].get("version") == (0, 2, 1))
+    record("bl_info Blender floor is 5.0", values["bl_info"].get("blender") == (5, 0, 0))
+    record(
+        "bl_info advertises 105 achievements",
+        "105 achievements" in values["bl_info"].get("description", ""),
+    )
+    record(
+        "runtime does not read loader-consumed bl_info",
+        not any(
+            isinstance(node, ast.Name)
+            and node.id == "bl_info"
+            and isinstance(node.ctx, ast.Load)
+            for node in ast.walk(module)
+        ),
+    )
     record("achievement count is 105", len(achievements) == 105, str(len(achievements)))
     record("lesson count is 9", len(lessons) == 9, str(len(lessons)))
     frozen_constants = {key: values[key] for key in FROZEN_CONSTANTS}
@@ -389,6 +369,21 @@ def verify_addon_contract() -> None:
     record("top-level function map frozen", functions == FROZEN_FUNCTIONS)
     record("top-level class map frozen", classes == FROZEN_CLASSES)
     record("registered operator classes frozen", registered_classes(module) == FROZEN_REGISTER_CLASSES)
+    call_paths = {
+        path
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call)
+        if (path := attribute_path(node.func)) is not None
+    }
+    record(
+        "runtime opens native extension management without self-uninstall",
+        "bpy.ops.screen.userpref_show" in call_paths
+        and not any(
+            path.startswith("bpy.ops.extensions.package_uninstall")
+            for path in call_paths
+        )
+        and "bpy.ops.preferences.addon_remove" not in call_paths,
+    )
 
     achievement_ids = [item.get("id") for item in achievements]
     lesson_ids = [item.get("id") for item in lessons]
@@ -484,32 +479,20 @@ def verify_addon_contract() -> None:
                 invalid.append(f"{lid}: {text_key}")
     record("achievement and lesson enums valid", not invalid, ", ".join(invalid[:10]))
 
-    source = function_source("_check_complex_step")
-    uncovered = [
-        complex_id
-        for complex_id in complex_ids
-        if not re.search(rf"complex_id\s*==\s*['\"]{re.escape(complex_id)}['\"]", source)
-    ]
-    record("complex ids covered", not uncovered, ", ".join(uncovered[:10]))
-
-    branch_steps = complex_step_coverage()
-    uncovered_steps = []
-    for item in achievements:
-        if item.get("check_type") != "complex":
-            continue
-        complex_id = item.get("complex_id")
-        steps = item.get("steps")
-        if not isinstance(complex_id, str) or not isinstance(steps, list):
-            continue
-        declared = {
-            step["check"]
-            for step in steps
-            if isinstance(step, dict) and isinstance(step.get("check"), str)
-        }
-        missing_steps = declared - branch_steps.get(complex_id, set())
-        if missing_steps:
-            uncovered_steps.append(f"{complex_id}: {', '.join(sorted(missing_steps))}")
-    record("complex step checks covered", not uncovered_steps, "; ".join(uncovered_steps[:5]))
+    predicate_errors = predicates.registry_bijection_errors(achievements)
+    registered_complex_ids = {
+        complex_id for complex_id, _step_check in predicates.PREDICATE_PAIRS
+    }
+    record(
+        "complex ids covered",
+        registered_complex_ids == set(complex_ids),
+        ", ".join(sorted(set(complex_ids) ^ registered_complex_ids)[:10]),
+    )
+    record(
+        "complex step checks covered by exact registry bijection",
+        not predicate_errors,
+        "; ".join(predicate_errors[:5]),
+    )
 
     counts = Counter(item.get("check_type") for item in achievements)
     record(
@@ -567,9 +550,42 @@ def verify_addon_contract() -> None:
 
 
 def verify_repo_contract() -> None:
-    record("duplicate addon file exists", DUPLICATE_ADDON.is_file())
-    if DUPLICATE_ADDON.is_file():
-        record("duplicate addon hash matches __init__.py", sha256(ADDON) == sha256(DUPLICATE_ADDON))
+    record("legacy duplicate addon is retired", not DUPLICATE_ADDON.exists())
+    record("historical 100-achievement list is archived", ARCHIVED_100_LIST.is_file())
+    if ARCHIVED_100_LIST.is_file():
+        result = subprocess.run(
+            [
+                "git",
+                "hash-object",
+                "--path=docs/archive/achievements_100_list.md",
+                str(ARCHIVED_100_LIST),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        record(
+            "archived 100-achievement list preserves baseline Git blob",
+            result.returncode == 0
+            and result.stdout.strip() == "daf6a8c858551fcffe4e6e7c8354f4420966cbc0",
+            result.stdout.strip(),
+        )
+    record("duplicate retirement ADR exists", DUPLICATE_RETIREMENT_ADR.is_file())
+    if DUPLICATE_RETIREMENT_ADR.is_file():
+        retirement_text = DUPLICATE_RETIREMENT_ADR.read_text(encoding="utf-8")
+        required_evidence = (
+            "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
+            "21d5023697370800ced934959463da1e4be7cd5f",
+            "9CB06CA4B4CECF48B2CA52E59F5F930B45FC537F5A945D262EBC086551090681",
+            "62DDB0163B29C8C4A39347DEAF19D201F71C50A3D0F9A48F803387444DB24DAE",
+            "git restore --source=04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
+        )
+        record(
+            "duplicate retirement ADR preserves exact recovery evidence",
+            all(marker in retirement_text for marker in required_evidence),
+        )
 
     tracked_ok, tracked, tracked_error = git_files()
     record("git tracked files available", tracked_ok, tracked_error)

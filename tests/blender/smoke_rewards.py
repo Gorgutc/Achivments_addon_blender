@@ -37,6 +37,17 @@ def reward(module, ach_id: str) -> dict:
     return next(item for item in module.ACHIEVEMENTS_DEF if item["id"] == ach_id)
 
 
+def expect_integrity_denial(ach_id: str) -> None:
+    try:
+        result = bpy.ops.ach.apply_reward(ach_id=ach_id)
+    except RuntimeError as error:
+        if "Unlock verification failed" not in str(error):
+            fail(f"unexpected reward denial error: {error}")
+        return
+    if result != {"CANCELLED"}:
+        fail(f"invalid-integrity reward returned {result}")
+
+
 def main() -> None:
     module = load_addon()
     module.register()
@@ -45,6 +56,13 @@ def main() -> None:
         cube = bpy.context.object
 
         material_ach = reward(module, "thousand_vertices")
+        module.stats.unlocked.add(material_ach["id"])
+        module.stats.unlock_hashes.pop(material_ach["id"], None)
+        expect_integrity_denial(material_ach["id"])
+        module.stats.unlock_hashes[material_ach["id"]] = "forged"
+        expect_integrity_denial(material_ach["id"])
+        if material_ach["id"] in module.stats.rewards_claimed:
+            fail("invalid integrity marker claimed material reward")
         unlock(module, material_ach["id"])
         result = bpy.ops.ach.apply_reward(ach_id=material_ach["id"])
         if result != {"FINISHED"}:

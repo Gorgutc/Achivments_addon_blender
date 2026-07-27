@@ -7,8 +7,10 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 - Canonical add-on runtime entrypoint: `__init__.py`.
 - Catalog source of truth: `achievements/catalog.py`.
 - Offline sync planning source: `achievements/sync.py`.
-- Tracked duplicate: `achievements_v01 (4).py`; it is a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task.
-- Stale reference file: `achievements_100_list.md` documents an older 100-achievement design and is not the current source of truth.
+- Predicate source of truth: the exact registry under `achievements/predicates/`; root `_check_complex_step` is the Blender-facing adapter.
+- Integrity source of truth: `achievements/integrity.py`; root hash functions remain compatibility wrappers.
+- Retired duplicate: `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact Git recovery evidence.
+- Stale reference file: `docs/archive/achievements_100_list.md` preserves an older 100-achievement design byte-for-byte and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
 - Source strings are UTF-8 Russian user-facing text. Mojibake in terminal output is a display/encoding artifact, not permission to normalize or rewrite all text.
 
@@ -16,8 +18,8 @@ This document freezes the current `main` behavior of the Achievements Blender ad
 
 - Add-on name: `Achievements`.
 - Author: `axximus`.
-- Version: `(0, 1, 0)`.
-- Current `bl_info["blender"]`: `(4, 5, 0)`, known drift against the future Blender 5.0+ policy.
+- Version: `(0, 2, 1)`.
+- Minimum `bl_info["blender"]`: `(5, 0, 0)`.
 - Location: `3D Viewport > Header (trophy icon)`.
 - Category: `Interface`.
 - Product concept: Blender gamification with achievements, XP/levels, rewards, tutorials, popups, and pinning.
@@ -92,7 +94,7 @@ Persisted stat fields:
 - `time_spent`
 - `renders_completed`
 
-Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without `schema_version` is migrated idempotently. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; Blender scene predicates remain in the runtime entrypoint and are passed to the engine as callbacks. Do not change persistence shape, path, migration behavior, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
+Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without current `schema_version` is migrated idempotently and may backfill a missing unlock marker. A current-schema payload never repairs a missing or forged marker. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; scene predicates live in pure `achievements/predicates/` and receive duck-typed Blender state from the root adapter. Do not change persistence shape, path, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
 
 ## Cloud Sync Stub
 
@@ -112,7 +114,8 @@ Internal session fields track active time, idle gaps, mesh/material snapshots, d
 
 ## Reward Rules
 
-- Unlock protection uses `_REWARD_SALT`, `os.getlogin()`, SHA-256, and the first 16 hex characters.
+- Unlock integrity uses the legacy salt, the unchanged `os.getlogin()` value when available, SHA-256, and the first 16 hex characters through pure `make_unlock_hash`/`verify_unlock_hash` helpers. Headless sessions fall back to `getpass.getuser()` and finally the fixed `unknown-user` value only when username resolution raises `OSError`.
+- The hash is a local integrity marker, not authentication or anti-cheat.
 - Rewards can be applied only when the achievement is unlocked and the stored unlock hash verifies.
 - `tutorial` rewards open URLs.
 - `none` rewards do nothing and stay claim-free.
@@ -132,6 +135,10 @@ Global layout:
 - Popup width, tab specs, pagination plans, Scene property specs, overlay frame geometry, storage filters, and reward labels are planned by pure `achievements/ui.py`; root `__init__.py` remains the Blender layout/GPU adapter.
 - Grid is 2 columns by 5 rows, 10 cards per page.
 - The stats box exposes a `Сбросить прогресс` button (`ach.reset_achievements`) that fully resets the profile after a confirmation dialog; this is an explicit testing/dev affordance.
+- The stats box also exposes `Удалить аддон…` (`ach.open_extension_manager`); the action is enabled only when the runtime resolves exactly one enabled user extension repository and the executing package path matches `bl_ext.<repo>.achievements`. It opens Blender's filtered native `Extensions` card; Blender owns the final `Uninstall` action.
+- Extension removal never deletes `~/BlenderAchievements/`. Reset and uninstall remain separate actions.
+- Add-on-owned operators must never call `extensions.package_uninstall`, manually delete their source tree, or use legacy `preferences.addon_remove`. Removing the executing module from its own Python operator is crash-prone on supported Blender versions.
+- Runtime code must not read root `bl_info` after import; Blender may consume it while loading an installed extension. Stable identity values come from `achievements.metadata`.
 - Cards are horizontal: icon on the left, text and actions on the right.
 - Icons are 100x100 via `CARD_ICON_UNITS = 5.0`.
 - Card width is `_CARD_W = 15.6`.
@@ -191,7 +198,7 @@ Do not replace GPU overlay behavior with panel-only UI unless explicitly request
 ## Runtime Lifecycle
 
 Registration registers:
-- Eight operator classes.
+- Nine operator classes.
 - `bpy.types.Scene` tab/page/accordion properties.
 - `depsgraph_update_post`, `load_post`, `save_pre`, and `render_complete` handlers.
 - `_timer_tick` and `_notification_redraw_tick` timers.
@@ -221,18 +228,17 @@ GPU overlays:
 - `_tag_redraw_all`
 - `_draw_rect`
 - `_reward_type_label`
-- `_ease_out_cubic`
 - `_draw_notifications`
 - `_draw_pinned_achievement`
 
 Achievement checking:
 - `check_achievements`
 - `_unlock_achievement`
-- `_check_streak`
 - `_check_complex_step`
 - `_check_complex`
 - `check_complex_achievements`
 - `_get_mesh_counts`
+- `_extension_management_target`
 
 Blender handlers and timers:
 - `on_depsgraph_update`
@@ -254,10 +260,12 @@ Operators:
 - `ACH_OT_PagePrev`
 - `ACH_OT_PageNext`
 - `ACH_OT_ResetAchievements`
+- `ACH_OT_OpenExtensionManager`
 - `ACH_OT_AchievementsDialog`
 
 UI helpers:
 - `achievements/ui.py`
+- `achievements.ui.ease_out_cubic`
 - `_tab_prop`
 - `_draw_unified_card`
 - `_draw_grid_page`
@@ -290,11 +298,12 @@ Before editing add-on behavior:
 
 ## Required Verification Coverage
 
-- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, duplicate hash, tracked-data safety, and this contract.
+- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, strict predicate-registry bijection, duplicate absence/recovery evidence, archived-list Git blob, tracked-data safety, and this contract.
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
 - Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
-- Blender `persistence` smoke freezes temp-home JSON schema, save/load, unlock-hash migration, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
-- Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers.
+- Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
+- Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers. It also proves factory defaults do not unlock `subsurface_skin` or `denoiser_render`, Subsurface uses only its exact Weight input, and denoiser evaluation is transiently gated to a completed Cycles render for the handler-supplied scene.
+- Release acceptance proves the installed extension-management route on all supported Blender versions and performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
 - Blender `ui_visual` smoke freezes UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

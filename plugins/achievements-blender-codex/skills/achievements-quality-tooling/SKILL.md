@@ -12,3 +12,12 @@ Expectations:
 - Codex verifier must validate plugin, skills, agents, docs, hooks, and stale instruction terms.
 - Blender smoke wrapper must isolate user directories.
 - Normal pytest should stay fast and avoid requiring Blender except dry-run checks.
+- Complex-predicate coverage must be a strict catalog-pair to registry bijection,
+  not a source-text search.
+- Pure predicate and integrity modules must import without `bpy`.
+- Root runtime lint may use only narrow bootstrap exceptions; new modules receive
+  the full configured Ruff rules and legacy duplicates must not be excluded.
+- CI Blender smoke is blocking for 5.0.1, 5.1.2, and 5.2.0 with no skipped rows,
+  repository URL variables, or `continue-on-error` targets.
+- Release packaging tests cover Git-blob parity, LF/CRLF behavior, dirty and
+  untracked payload rejection, allowlists, and repeated deterministic digests.

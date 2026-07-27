@@ -1,8 +1,10 @@
 # Archive Policy
 
-The repository currently has a tracked duplicate add-on file. Treat `achievements_v01 (4).py` as a permanent byte-identical duplicate unless the user explicitly changes that policy in a later task. Do not delete or move it during preparation-only work.
+ADR 0002 retired the byte-identical `achievements_v01 (4).py` duplicate during the user-approved 0.2.0 technical closeout. Root `__init__.py` is the only canonical Blender runtime. The retired bytes remain recoverable from their recorded Git blob, commit, and SHA-256; do not restore a second active runtime without a new owner decision.
 
-Future archive decisions for other repository artifacts should preserve:
+The obsolete `achievements_100_list.md` was moved byte-for-byte to `docs/archive/achievements_100_list.md`. It is historical planning evidence, not the current 105-achievement catalog.
+
+Future archive decisions should preserve:
 - The canonical source file selected by maintainers.
 - A clear migration note explaining why an artifact was archived.
 - A verifier update when an accepted policy change alters required tracked artifacts.

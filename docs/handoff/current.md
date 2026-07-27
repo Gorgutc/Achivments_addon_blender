@@ -1,89 +1,86 @@
-# Current Handoff
+# Achievements 0.2.1 — Developer Reset And Predicate Fixes
 
 ## Goal
 
-Iteration 12: Release.
+Finish the developer-test slice on `codex/backlog-technical-closeout` and draft PR #14: preserve the existing confirmed progress reset, add a crash-safe route to real Blender extension removal, prevent factory-default false unlocks for `subsurface_skin` and `denoiser_render`, and publish a separately verified `reports/extension/achievements-0.2.1.zip`. Catalog IDs, persistence keys, and `SCHEMA_VERSION = "1.0.0"` remain unchanged.
 
-Finalize the Blender extension release path, fix the optional Blender 5.2 alpha canary workflow behavior when `BLENDER_5_2_ALPHA_URL` is unset, and document the release packaging gate without changing add-on runtime behavior.
+This slice starts from completed 0.2.0 handoff head `98c84b5961e6b9957788ecc42c3044816af551c6`. The original technical-backlog and duplicate-retirement baseline remains `04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3`; ADR 0002 and its recovery evidence remain historical truth. ADR 0003 records the new runtime decisions. The immutable 0.2.0 ZIP is not overwritten.
+
+## Branch And Pull Request
+
+- Branch: `codex/backlog-technical-closeout`
+- Draft PR: `https://github.com/Gorgutc/Achivments_addon_blender/pull/14`
+- Supported blocking matrix: Blender 5.0.1/5.1.2/5.2.0
+- Merge, tag, and GitHub Release are not authorized.
 
 ## Changed Files
 
-- `.github/workflows/blender-smoke.yml`
-- `README.md`
-- `docs/agent/packaging-release.md`
-- `docs/agent/quality-tooling.md`
-- `docs/agent/verification.md`
-- `docs/handoff/current.md`
-- `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`
-- `scripts/build_extension.py`
-- `scripts/verify_codex_plugin.py`
-- `tests/test_infra_scripts.py`
-- `tests/test_release_packaging.py`
+- Root runtime: version 0.2.1, render-event propagation, handler-supplied scene, strict installed-extension resolution, and native `Extensions` navigation.
+- Pure helpers: optional predicate event, exact Principled Subsurface Weight, event-gated Cycles denoising, and fail-closed extension target planning.
+- Tests and verifiers: factory-default characterization, real exception sentinels for all 85 predicate pairs, handler-level render semantics, Blender Extensions API checks, and an AST prohibition on self-uninstall.
+- Active README, architecture, frozen contract/decisions, verification, packaging guidance, plugin skills, ADR 0003, and this handoff.
 
 ## Done
 
-- Investigated the failed GitHub Actions check `Achievements Blender Smoke / blender-5-2-alpha-canary`.
-- Root cause: the optional canary job received an empty `BLENDER_5_2_ALPHA_URL`, so the workflow failed while trying to install Blender 5.2 alpha.
-- Added `id: install-blender` and `skip_smoke` output handling to `.github/workflows/blender-smoke.yml`.
-- The canary now emits `Skipping optional Blender 5.2 alpha canary` and skips smoke steps when `BLENDER_5_2_ALPHA_URL` is empty; the stable Blender 5.1 row still fails if its URL is missing.
-- Added release packaging helper `scripts/build_extension.py`.
-- Prepared a lean release source tree under `reports/extension/source` with only `blender_manifest.toml`, root `__init__.py`, and `achievements/`.
-- The release package excludes repository docs, tests, scripts, plugins, GitHub workflow files, and `achievements_v01 (4).py`.
-- Verified the generated ZIP path `reports/extension/achievements-0.1.0.zip` and static repository generation result `found 1 packages`.
-- Updated README, verification docs, quality-tooling docs, packaging-release docs, roadmap, infra verifier, and tests for Iteration 12.
-- Left `__init__.py` and `achievements_v01 (4).py` untouched, so the duplicate contract remains unchanged.
-- Did not touch real `~/BlenderAchievements` data.
+- Kept `Сбросить прогресс` behavior and confirmation unchanged. It resets achievement/progress state but does not remove the extension or delete `textures/`/`rewards/` assets.
+- Added `Удалить аддон…`. It is enabled only when `bl_ext.<repo>.achievements` resolves to exactly one enabled USER repository and the executing package directory matches that repository.
+- The navigation operator checks Preferences availability, opens `section='EXTENSIONS'`, selects add-ons and installed packages, clears stale filters/tags, and searches for `Achievements`. Blender owns the final `Uninstall` action after add-on code returns.
+- Installed extensions may lose root `bl_info` after Blender consumes it. Runtime navigation therefore reads `achievements.metadata.ADDON_NAME`; the frozen verifier forbids later `bl_info` reads, and Blender register smoke removes `bl_info` before exercising the full success branch.
+- Prohibited add-on-owned `extensions.package_uninstall`, legacy `preferences.addon_remove`, and manual package deletion. Nested self-uninstall crashed isolated Blender 5.0.1/5.1.2/5.2.0 processes and is not part of normal verification.
+- Kept `~/BlenderAchievements/` outside package removal. External Blender-owned removal acceptance uses only disposable profiles and must prove sentinel data unchanged.
+- Fixed `subsurface_skin`: default-positive `Subsurface Scale`/`Subsurface IOR` no longer count; only exact active or linked `Subsurface Weight` (plus exact legacy `Subsurface`) matches.
+- Fixed `denoiser_render`: only a completed Cycles render with `use_denoising` matches. Timer/depsgraph checks, Eevee, denoising-off, and passive default configuration remain false.
+- `on_render_complete` evaluates the scene supplied by Blender rather than an unrelated ambient context scene.
+- Preserved the exact 65-ID/85-pair catalog bijection, all 105 catalog IDs, 9 lessons, full GPL-3.0-or-later `LICENSE`, reward fallbacks, and offline-only sync.
+- Historical duplicate evidence remains raw LF SHA-256 `9CB06CA4B4CECF48B2CA52E59F5F930B45FC537F5A945D262EBC086551090681` and Windows CRLF SHA-256 `62DDB0163B29C8C4A39347DEAF19D201F71C50A3D0F9A48F803387444DB24DAE`.
+
+## Candidate Artifact
+
+- Canonical path: `reports/extension/achievements-0.2.1.zip`
+- Exact runtime source revision: `e179172705197da089ea04f709aaca3b38ad395b`.
+- SHA-256: `568E1595249CA2816E461BE5AA5FAD5687C686BACD613B5B0A72A7E8D5337D42`.
+- Size: `62,691` bytes; `22` regular allowlisted members; `237,719` uncompressed bytes.
+- Every member is byte-identical to the corresponding Git blob at the exact source revision. There are no symlinks, duplicate entries, path traversal, or unexpected files.
+- Blender 5.0.1/5.1.2/5.2.0 independently produced the same member digest map. The canonical byte stream is the Blender 5.2.0 build and remained unchanged through validation, repository generation, installation, probing, and removal checks on all three versions.
+- Existing `reports/extension/achievements-0.2.0.zip` remains immutable. The invalidated pre-fix 0.2.1 candidate remains recoverably quarantined under `reports/extension-invalid/` and is not installable delivery evidence.
 
 ## Remaining
 
-- Configure repository variable `BLENDER_5_2_ALPHA_URL` if real Blender 5.2 alpha coverage is required in GitHub Actions.
-- Keep Blender 5.2 alpha non-blocking unless a future explicit release decision promotes it to a blocking target.
-- Asset/license policy remains open: no reward `.blend` assets are bundled until licenses are explicitly approved.
-- Future release work can decide whether to update known `bl_info` policy drift; this iteration keeps runtime source unchanged.
+- Push the current 0.2.1 branch, including this refreshed handoff, to draft PR #14; observe its blocking checks and leave merge/tag/GitHub Release to a separate owner decision.
+- Complete isolated Second Brain and append-only automatic-memory closeout without changing any `instance_matcher` surface.
+- Owner-input epics stay open: 219 referenced PNG files, 11 placeholder tutorial URLs, 20 reward `.blend` names plus licenses, same-object/custom-origin/WIND behavior decisions, production cloud, and remaining UI/GPU decomposition.
 
 ## Verification
 
-- Targeted checks:
-  - `uv run pytest tests\test_release_packaging.py` passed: `7 passed`.
-  - `uv run ruff check scripts\build_extension.py tests\test_release_packaging.py` passed.
-  - `uv run python scripts/build_extension.py --output-dir reports\extension --server-generate` prepared `12 release files` and printed shell-safe Blender commands.
-  - `blender --background --command extension validate reports\extension\source` passed.
-  - `& 'C:\Program Files\Blender Foundation\Blender 5.1\blender.exe' '--background' '--command' 'extension' 'validate' 'reports\extension\source'` passed.
-  - `blender --background --command extension build --source-dir reports\extension\source --output-dir reports\extension` passed and produced `reports/extension/achievements-0.1.0.zip`.
-  - `blender --background --command extension server-generate --repo-dir reports\extension --html` passed with `found 1 packages`.
-  - `tar -tf reports\extension\achievements-0.1.0.zip` confirmed the ZIP contains only `blender_manifest.toml`, root `__init__.py`, and `achievements/`.
-- Final fast gate:
-  - `uv run python scripts/verify_frozen.py` passed: `35/35 PASS`.
-  - `uv run python scripts/verify_codex_plugin.py` passed: `94/94 PASS`.
-  - `uv run ruff check .` passed.
-  - `uv run pytest` passed: `61 passed`.
-- Final Blender smoke gate on Blender 5.1.2 with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`:
-  - `uv run python scripts/run_blender_smoke.py --suite register` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite lifecycle_stress` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite persistence` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite engine` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite rewards` passed.
-  - `uv run python scripts/run_blender_smoke.py --suite ui_visual` passed and saved `ui_visual_contract.png` under the temporary visual QA artifact directory.
-  - `git diff --cached --check` passed.
+Committed-revision evidence:
+
+- `verify_frozen.py`: `42/42 PASS`; `verify_codex_plugin.py`: `104/104 PASS`; exact predicate registry: 65 IDs / 85 catalog pairs with no `bpy` imports.
+- `ruff check .`: PASS; full `pytest`: `455 passed`.
+- All six Blender suites (`engine`, `lifecycle_stress`, `persistence`, `register`, `rewards`, `ui_visual`) passed on Blender 5.0.1, 5.1.2, and 5.2.0: `18/18 PASS` in disposable profiles.
+- `extension validate`, `extension build`, and `server-generate` passed on all three versions from exact committed Git blobs. The exact canonical ZIP then passed a second `validate` and fresh one-package `server-generate` on all three versions.
+- Fresh install/enable, installed-module identity, strict USER-repository resolution, installed Git-byte equality, native Extensions RNA, external Blender-owned removal, disabled/unimportable post-state, and data preservation passed on all three versions.
+- The installed lifecycle runner failed closed on non-zero exit, missing PASS markers, Python traceback, `NameError`, access violation, `WinError`, warning/error markers, or changed archive bytes; the final three-version run emitted none of those forbidden conditions.
+- Three sentinel files under each disposable `BlenderAchievements` directory retained exact size and SHA-256 across install, probe, removal, and post-removal probe. Real user progress was never addressed.
+- The unchanged reset operator was separately exercised on all three versions: dialog cancellation preserved exact runtime state, persisted JSON, assets, and backup bytes; confirmation wrote a fresh current-schema profile while preserving `textures/`, `rewards/`, and the corrupt-backup sentinel.
+- Headless Blender cannot open an interactive Preferences window (`screen.userpref_show.poll() == False`). The success branch is dynamically tested with loader-consumed `bl_info`, while real installed probes validate its target and native RNA; the final visible `Uninstall` click remains Blender-owned user interaction.
 
 ## Agents And Review
 
-- `quality_tooling_architect` sidecar audited the canary failure and recommended canary-only skip behavior for missing `BLENDER_5_2_ALPHA_URL`.
-- First read-only review sidecar found four issues: unbounded `shutil.rmtree`, unsafe printed command quoting, handoff pending text, and staged whitespace. All four were fixed.
-- Final read-only verification sidecar found the remaining handoff-only inconsistency (`5 passed` and pending review/gate text). This handoff now records the actual final results.
-- Final `/review` fallback status: PASS. The staged diff matches Iteration 12 scope, canary skip behavior is documented and tested, release packaging uses a bounded generated directory and shell-safe printed commands, runtime source and duplicate are unchanged, generated ZIP contents are lean, and residual risks are listed below.
+- Persistent `requirements_guardian` maintains the ignored session ledger and checks scope, done work, and remaining gates.
+- Code/dead-code and component/instruction-drift/lookahead agents independently reproduced both false unlocks and the nested-uninstall crash on all supported versions.
+- Independent component/instruction and code/dead-code reviews closed with `Critical 0 / Important 0` after the loader-consumed `bl_info` regression test. The final verification-review and explicit `/review` fallback use the exact artifact evidence above.
 
 ## Blockers
 
-None for the release tooling PR.
+No current implementation blocker. Merge, tag, and GitHub Release remain intentionally unauthorized.
 
 ## Residual Risks
 
-- Empty `BLENDER_5_2_ALPHA_URL` now skips the optional canary without failing, but that run provides no Blender 5.2 alpha coverage.
-- The generated extension ZIP intentionally omits reward `.blend` assets until asset licenses are explicitly approved.
-- `reports/` remains generated local output and is ignored by git.
-- Known add-on metadata drift in runtime `bl_info` is not changed in this iteration because runtime source and duplicate were intentionally left untouched.
+- The uninstall button intentionally opens Blender's filtered native card and requires the user to select `Uninstall`; one-click self-removal from add-on-owned Python is unsafe.
+- Existing already-unlocked false-positive IDs are not revoked automatically. Use the existing confirmed reset for a clean retest.
+- Real content remains absent: 219 referenced PNG files, 11 placeholder tutorial URLs, and 20 reward `.blend` names need owner-provided licensed content.
+- Same-object predicate requirements, `custom_origin`, WIND/particle edge cases, production cloud, and remaining UI/GPU decomposition remain separate tasks.
 
 ## Next Start Prompt
 
-Continue after Iteration 12 merge. Read `docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md`, `docs/handoff/current.md`, `docs/agent/packaging-release.md`, `docs/agent/frozen-application-contract.md`, and `docs/agent/verification.md`. Do not touch real `~/BlenderAchievements` data. Start the next user-approved release or post-release task, preserve the byte-identical duplicate contract, keep README updated, and decide bundled reward asset/license policy before packaging any reward assets.
+Review Achievements 0.2.1 on `codex/backlog-technical-closeout` and draft PR #14. Read `AGENTS.md`, this handoff, ADR 0002, and ADR 0003. Confirm current CI/owner acceptance before any merge or version decision. Do not merge, tag, create a GitHub Release, touch real `~/BlenderAchievements`, overwrite the immutable 0.2.0 ZIP, or modify any `instance_matcher` information.

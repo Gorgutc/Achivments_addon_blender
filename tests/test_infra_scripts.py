@@ -39,6 +39,34 @@ def fake_blender(tmp_path):
     return path
 
 
+def test_smoke_runner_tolerates_windows_acl_cleanup_after_process_result():
+    text = (ROOT / "scripts" / "run_blender_smoke.py").read_text(encoding="utf-8")
+
+    assert "shutil.rmtree(temp_home, ignore_errors=True)" in text
+    assert "[smoke-runner:WARN] temporary profile cleanup incomplete" in text
+
+
+def test_smoke_runner_requires_exact_pass_marker_and_rejects_tracebacks():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import run_blender_smoke
+
+    assert run_blender_smoke.smoke_result_code(
+        "register", 0, "[smoke_register:PASS] clean"
+    ) == 0
+    assert run_blender_smoke.smoke_result_code("register", 2, "") == 2
+    assert run_blender_smoke.smoke_result_code("register", 0, "Blender quit") == 1
+    assert run_blender_smoke.smoke_result_code(
+        "register",
+        0,
+        "Traceback (most recent call last):\n[smoke_register:PASS]",
+    ) == 1
+    assert run_blender_smoke.smoke_result_code(
+        "register", 0, "[smoke_register:FAIL] bad"
+    ) == 1
+
+
 def top_level_assigned_names(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names = set()
@@ -67,12 +95,38 @@ def test_verify_frozen_passes_current_addon_contract():
     assert "complex ids covered" in result.stdout
 
 
+def test_archived_catalog_blob_check_is_stable_for_windows_crlf(tmp_path):
+    source = ROOT / "docs" / "archive" / "achievements_100_list.md"
+    crlf_copy = tmp_path / "achievements_100_list.md"
+    lf_bytes = source.read_bytes().replace(b"\r\n", b"\n")
+    crlf_copy.write_bytes(lf_bytes.replace(b"\n", b"\r\n"))
+
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.autocrlf=true",
+            "hash-object",
+            "--path=docs/archive/achievements_100_list.md",
+            str(crlf_copy),
+        ],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout.strip() == "daf6a8c858551fcffe4e6e7c8354f4420966cbc0"
+
+
 def test_verify_codex_plugin_passes_current_infra_contract():
     result = run_script("scripts/verify_codex_plugin.py")
     assert_clean_verifier(result)
     assert "plugin manifest exists" in result.stdout
     assert "codex agent exists" in result.stdout
-    assert "extension draft exists: blender_manifest.toml" in result.stdout
+    assert "extension manifest exists: blender_manifest.toml" in result.stdout
     assert "release builder exists: scripts/build_extension.py" in result.stdout
     assert "package skeleton exists: achievements/__init__.py" in result.stdout
     assert "package metadata exists: achievements/metadata.py" in result.stdout
@@ -196,15 +250,12 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "contents: read",
         'python-version: "3.13"',
         "astral-sh/setup-uv@v5",
-        "blender-5-1-stable",
+        "blender-5-0-1",
+        "Blender5.0/blender-5.0.1-linux-x64.tar.xz",
+        "blender-5-1-2",
         "Blender5.1/blender-5.1.2-linux-x64.tar.xz",
-        "blender-5-2-alpha-canary",
-        "BLENDER_5_2_ALPHA_URL",
-        "continue-on-error: ${{ matrix.canary }}",
-        "id: install-blender",
-        "skip_smoke=true",
-        "Skipping optional Blender 5.2 alpha canary",
-        "if: steps.install-blender.outputs.skip_smoke != 'true'",
+        "blender-5-2-0",
+        "Blender5.2/blender-5.2.0-linux-x64.tar.xz",
         "BLENDER_BIN=",
         "uv run python scripts/run_blender_smoke.py --suite register",
         "uv run python scripts/run_blender_smoke.py --suite lifecycle_stress",
@@ -214,8 +265,14 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "uv run python scripts/run_blender_smoke.py --suite ui_visual",
     ):
         assert phrase in blender_text
-    assert "canary: false" in blender_text
-    assert "canary: true" in blender_text
+    for forbidden in (
+        "continue-on-error",
+        "BLENDER_5_2_ALPHA_URL",
+        "matrix.canary",
+        "skip_smoke",
+        "Skipping optional",
+    ):
+        assert forbidden not in blender_text
 
 
 def test_iteration_plan_and_handoff_artifacts_are_present():
@@ -307,41 +364,27 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Iteration 12: Release",
-        ".github/workflows/blender-smoke.yml",
-        "README.md",
-        "docs/agent/packaging-release.md",
-        "docs/agent/verification.md",
-        "docs/agent/quality-tooling.md",
-        "docs/handoff/current.md",
-        "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
-        "scripts/build_extension.py",
-        "scripts/verify_codex_plugin.py",
-        "tests/test_infra_scripts.py",
-        "tests/test_release_packaging.py",
-        "Added `id: install-blender` and `skip_smoke` output handling",
-        "Skipping optional Blender 5.2 alpha canary",
-        "`BLENDER_5_2_ALPHA_URL`",
-        "Prepared a lean release source tree under `reports/extension/source`",
-        "`blender_manifest.toml`, root `__init__.py`, and `achievements/`",
-        "excludes repository docs, tests, scripts, plugins, GitHub workflow files, and `achievements_v01 (4).py`",
-        "`reports/extension/achievements-0.1.0.zip`",
-        "`found 1 packages`",
-        "uv run python scripts/verify_frozen.py",
-        "uv run python scripts/verify_codex_plugin.py",
-        "uv run ruff check .",
-        "uv run pytest",
-        "uv run python scripts/build_extension.py --output-dir reports\\extension --server-generate",
-        "blender --background --command extension validate reports\\extension\\source",
-        "blender --background --command extension build --source-dir reports\\extension\\source --output-dir reports\\extension",
-        "blender --background --command extension server-generate --repo-dir reports\\extension --html",
-        "Final `/review` fallback status",
-        "Continue after Iteration 12 merge",
+        "Achievements 0.2.1 — Developer Reset And Predicate Fixes",
+        "`codex/backlog-technical-closeout`",
+        "pull/14",
+        "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
+        "Blender 5.0.1/5.1.2/5.2.0",
+        "`reports/extension/achievements-0.2.1.zip`",
+        "`SCHEMA_VERSION = \"1.0.0\"`",
+        "ADR 0002",
+        "exact 65-ID/85-pair catalog bijection",
+        "full GPL-3.0-or-later `LICENSE`",
+        "raw LF SHA-256 `9CB06CA4",
+        "Windows CRLF SHA-256 `62DDB016",
+        "219 referenced PNG files",
+        "11 placeholder tutorial URLs",
+        "20 reward `.blend` names",
+        "Do not merge, tag, create a GitHub Release",
+        "modify any `instance_matcher` information",
     ):
         assert phrase in current_text
-    assert "Final gate to run" not in current_text
-    assert "must be performed before final delivery" not in current_text
-    assert "only inside negative test assertions" not in current_text
+    assert "BLENDER_5_2_ALPHA_URL" not in current_text
+    assert "Continue after Iteration 12 merge" not in current_text
 
 
 def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
@@ -361,7 +404,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     assert data["schema_version"] == "1.0.0"
     assert data["id"] == "achievements"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.2.1"
     assert data["name"] == "Achievements"
     assert data["type"] == "add-on"
     assert data["blender_version_min"] == "5.0.0"
@@ -382,13 +425,22 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
         (
             "import achievements; "
             "print(achievements.ADDON_NAME); "
-            "print(achievements.BLENDER_COMPATIBILITY_FLOOR)"
+            "print(achievements.ADDON_VERSION); "
+            "print(achievements.BLENDER_COMPATIBILITY_FLOOR); "
+            "print(achievements.MINIMUM_VALIDATION_TARGET); "
+            "print(achievements.PRIMARY_VALIDATION_TARGET); "
+            "print(achievements.LATEST_VALIDATION_TARGET); "
+            "print(achievements.CANARY_VALIDATION_TARGET)"
         ),
         env=env,
     )
     assert result.returncode == 0, result.stdout
     assert "Achievements" in result.stdout
+    assert "(0, 2, 1)" in result.stdout
     assert "(5, 0, 0)" in result.stdout
+    assert "Blender 5.0.1" in result.stdout
+    assert "Blender 5.1.2" in result.stdout
+    assert result.stdout.count("Blender 5.2.0") == 2
     assert not (home / "BlenderAchievements").exists()
     assert not (userprofile / "BlenderAchievements").exists()
     assert not (resources / "BlenderAchievements").exists()
@@ -496,21 +548,23 @@ def test_iteration_4_catalog_module_is_source_of_truth_and_safe_to_import(tmp_pa
 def test_runtime_docs_alignment_matches_current_policy():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "Blender 5.0+" in readme
-    assert "Blender 5.1 stable" in readme
-    assert "Blender 5.2 alpha" in readme
+    for version in ("Blender 5.0.1", "5.1.2", "5.2.0"):
+        assert version in readme
     assert "105 достижений" in readme
     assert "9 уроков" in readme
     assert "Blender 4.5 / 5.0 / 5.1" not in readme
     assert "blender_achievements_addon_v01.zip" not in readme
     assert "blender_achievements.py" not in readme
     assert "achievements/catalog.py" in readme
+    assert "achievements/predicates/" in readme
+    assert "achievements/integrity.py" in readme
     assert "achievements/sync.py" in readme
     assert "networking is not wired into normal add-on use" in readme
     assert ".github/workflows/fast-gate.yml" in readme
     assert ".github/workflows/blender-smoke.yml" in readme
     assert "Python 3.13" in readme
-    assert "BLENDER_5_2_ALPHA_URL" in readme
-    assert "skipped without failing the workflow" in readme
+    assert "BLENDER_5_2_ALPHA_URL" not in readme
+    assert "optional canary" in readme
     assert "scripts/build_extension.py" in readme
     assert "extension validate" in readme
     assert "extension build" in readme
@@ -519,6 +573,84 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "catalog, persistence, engine, rewards, sync, UI" in readme
     assert "Одиночный .py" not in readme
     assert "Ожидаемые пользовательские ассеты" in readme
+    assert "step_check ==" not in readme
+    for stale_line_reference in (
+        "813–1527",
+        "строка 119",
+        "строка 127",
+        "Строки 156–167",
+        "Строки 190–196",
+        "Строка 2325",
+        "строки 251–357",
+    ):
+        assert stale_line_reference not in readme
+
+    extension_guidance_paths = (
+        ROOT / "README.md",
+        ROOT / "docs" / "agent" / "packaging-release.md",
+        ROOT / "docs" / "agent" / "quality-tooling.md",
+        ROOT / "docs" / "agent" / "verification.md",
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-packaging"
+        / "SKILL.md",
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-quality-gate"
+        / "SKILL.md",
+    )
+    for path in extension_guidance_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "--run-blender" in text, path
+        assert "--factory-startup" in text, path
+        assert re.search(r"fresh,?\s+(?:never-used\s+)?per-run", text), path
+        assert "never-used" in text, path
+        for profile_variable in ("HOME", "USERPROFILE", "BLENDER_USER_RESOURCES"):
+            assert profile_variable in text, path
+        for subcommand in ("validate", "build", "server-generate"):
+            assert re.search(rf"extension\s+{re.escape(subcommand)}", text), path
+        assert "blender --background --command extension" not in text, path
+
+    for path in extension_guidance_paths[:4] + (extension_guidance_paths[4],):
+        text = path.read_text(encoding="utf-8")
+        assert "reports/extension/" in text, path
+        assert "deliberately" in text, path
+        assert "byte-copy" in text, path
+        assert re.search(
+            r"destination\s+must\s+not\s+already\s+exist",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert "source/destination SHA-256" in text, path
+        assert re.search(
+            r"never\s+rebuild\s+or\s+overwrite",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert "Copy-Item -Force" not in text, path
+        assert re.search(
+            r"per-version\s+self-built\s+ZIPs\s+(?:are|as)\s+build\s+evidence\s+only",
+            text,
+            flags=re.IGNORECASE,
+        ), path
+        assert re.search(r"exact\s+frozen\s+canonical\s+SHA", text), path
+
+    for path in (
+        ROOT / "README.md",
+        ROOT / "docs" / "agent" / "packaging-release.md",
+        ROOT / "docs" / "agent" / "verification.md",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "[extension-cli:WARN]" in text, path
+        assert re.search(
+            r"invalidates\s+release\s+acceptance\s+even\s+when",
+            text,
+        ), path
+        assert "exits zero" in text, path
 
     find_blender = (ROOT / "scripts" / "find_blender.py").read_text(encoding="utf-8")
     assert "MIN_VERSION = (5, 0, 0)" in find_blender
@@ -535,8 +667,8 @@ def test_runtime_docs_alignment_matches_current_policy():
     )
     for path in duplicate_policy_docs:
         text = path.read_text(encoding="utf-8")
-        assert "permanent byte-identical duplicate" in text, path
-        assert "removed or archived" not in text, path
+        assert "ADR 0002" in text, path
+        assert "permanent byte-identical duplicate" not in text, path
     for path in (
         ROOT / "docs" / "agent" / "architecture.md",
         ROOT / "docs" / "agent" / "frozen-application-contract.md",
@@ -553,17 +685,23 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "## Cloud Sync Stub" in frozen_contract
     assert "Sync payloads intentionally exclude `pinned_ach_id`" in frozen_contract
 
-    stale_catalog_reference = (ROOT / "achievements_100_list.md").read_text(encoding="utf-8")
+    assert not (ROOT / "achievements_100_list.md").exists()
+    assert not (ROOT / "achievements_v01 (4).py").exists()
+    stale_catalog_reference = (
+        ROOT / "docs" / "archive" / "achievements_100_list.md"
+    ).read_text(encoding="utf-8")
     assert "stale reference" in stale_catalog_reference
     assert "105 achievements" in stale_catalog_reference
     assert "9 lessons" in stale_catalog_reference
 
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
-    assert "Release packaging is now active Iteration 12 tooling" in packaging_release
+    assert "Achievements 0.2.1 candidate" in packaging_release
     assert "scripts/build_extension.py" in packaging_release
-    assert "reports/extension/source" in packaging_release
+    assert "reports/extension-validation/<run-id>/blender-5.1.2/source" in packaging_release
     assert "release package excludes docs/tests/plugins/scripts" in packaging_release
-    assert "achievements_v01 (4).py` remains a permanent byte-identical duplicate" in packaging_release
+    assert "ADR 0002 retired `achievements_v01 (4).py`" in packaging_release
+    assert "`LICENSE`" in packaging_release
+    assert "--revision HEAD" in packaging_release
     assert "extension validate" in packaging_release
     assert "extension build" in packaging_release
     assert "extension server-generate" in packaging_release
@@ -572,18 +710,19 @@ def test_runtime_docs_alignment_matches_current_policy():
     verification = (ROOT / "docs" / "agent" / "verification.md").read_text(encoding="utf-8")
     assert ".github/workflows/fast-gate.yml" in verification
     assert ".github/workflows/blender-smoke.yml" in verification
-    assert "blender-5-1-stable" in verification
-    assert "blender-5-2-alpha-canary" in verification
-    assert "BLENDER_5_2_ALPHA_URL" in verification
-    assert "skips its smoke steps without failing the workflow" in verification
+    for version in ("Blender 5.0.1", "5.1.2", "5.2.0"):
+        assert version in verification
+    assert "BLENDER_5_2_ALPHA_URL" not in verification
+    assert "no target is skipped or non-blocking" in verification
     assert "scripts/build_extension.py" in verification
     assert "extension validate" in verification
     assert "extension build" in verification
 
     quality_tooling = (ROOT / "docs" / "agent" / "quality-tooling.md").read_text(encoding="utf-8")
     assert "Python 3.13" in quality_tooling
-    assert "continue-on-error" in quality_tooling
-    assert "skips rather than failing" in quality_tooling
+    for version in ("Blender 5.0.1", "5.1.2", "5.2.0"):
+        assert version in quality_tooling
+    assert "no repository URL variable, skipped row, canary, or `continue-on-error`" in quality_tooling
     assert "scripts/build_extension.py" in quality_tooling
-    assert "release package excludes docs/tests/plugins/scripts" in quality_tooling
+    assert "Packaging tests freeze LF/CRLF behavior" in quality_tooling
     assert "uv run python scripts/run_blender_smoke.py --suite ui_visual" in quality_tooling
