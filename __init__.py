@@ -110,6 +110,7 @@ from .achievements import engine as ach_engine
 from .achievements import events as ach_events
 from .achievements import integrity as ach_integrity
 from .achievements import lifecycle as ach_lifecycle
+from .achievements import levels as ach_levels
 from .achievements import metadata as ach_metadata
 from .achievements import persistence as ach_persistence
 from .achievements import predicates as ach_predicates
@@ -123,56 +124,21 @@ _REWARD_ASSET_CACHE = ach_rewards.AssetCache()
 # =============================================
 #  XP & LEVEL SYSTEM
 # =============================================
-# Difficulty -> XP points mapping
-DIFFICULTY_XP = {
-    "easy": 5,
-    "medium": 10,
-    "hard": 20,
-}
-
-# Level thresholds: XP needed FROM this level TO the next
-# Level 1->2: 20, 2->3: 40, 3->4: 80, ... (doubles each time)
-XP_LEVELS = []
-_xp_accum = 0
-for _lvl in range(1, 11):
-    _threshold = 20 * (2 ** (_lvl - 1))  # 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240
-    XP_LEVELS.append({"level": _lvl, "xp_start": _xp_accum, "xp_end": _xp_accum + _threshold})
-    _xp_accum += _threshold
-# Total XP for level 10 cap: 20460
-
-# Level rank titles (Russian)
-LEVEL_TITLES = {
-    1:  "Новичок",
-    2:  "Начинающий",
-    3:  "Ньюблинг",
-    4:  "Ученик",
-    5:  "Умелец",
-    6:  "Мастеровой",
-    7:  "Эксперт",
-    8:  "Виртуоз",
-    9:  "Гуру",
-    10: "Легенда",
-}
+# Compatibility aliases keep the root runtime API stable while pure level
+# planning and formatting live in the bpy-free support package.
+DIFFICULTY_XP = ach_levels.DIFFICULTY_XP
+XP_LEVELS = ach_levels.XP_LEVELS
+LEVEL_TITLES = ach_levels.LEVEL_TITLES
 
 
 def _calc_xp():
     """Calculate total XP from unlocked achievements."""
-    total = 0
-    for ach in ACHIEVEMENTS_DEF:
-        if ach["id"] in stats.unlocked:
-            total += DIFFICULTY_XP.get(ach.get("difficulty", "medium"), 10)
-    return total
+    return ach_levels.calculate_xp(ACHIEVEMENTS_DEF, stats.unlocked)
 
 
 def _calc_level(xp):
     """Calculate current level and progress within that level."""
-    for entry in XP_LEVELS:
-        if xp < entry["xp_end"]:
-            lvl = entry["level"]
-            progress = (xp - entry["xp_start"]) / (entry["xp_end"] - entry["xp_start"])
-            return lvl, progress, entry["xp_end"] - entry["xp_start"], xp - entry["xp_start"]
-    # Max level reached
-    return 10, 1.0, 0, 0
+    return ach_levels.calculate_level(xp)
 
 
 def _difficulty_label(diff):
@@ -207,7 +173,8 @@ class Stats:
     time_spent = 0
     renders_completed = 0   # new stat for render tracking
     _session_start = 0.0
-    _last_activity = 0.0    # timestamp of last user action (depsgraph update)
+    _last_activity = 0.0    # monotonic timestamp of last real activity event
+    _last_accounted_activity = 0.0  # credited boundary inside the active window
     _time_at_session_start = 0  # time_spent snapshot when session started (for weekend_marathon)
     _prev_verts = {}
     _prev_edges = {}
@@ -228,19 +195,20 @@ stats = Stats()
 # =============================================
 #  SAVE / LOAD
 # =============================================
-# Maximum idle gap (seconds). If the user hasn't touched anything for
-# longer than this, the elapsed time is NOT counted.
+# Accepted active tail (seconds) after the latest real activity event.
+# Overlapping event windows merge; timer/save_data flushes never extend the tail.
 _IDLE_TIMEOUT = 120  # 2 minutes
+_activity_clock = time.monotonic
 
 
 def _on_user_activity():
-    """Called from depsgraph handler when real user changes are detected."""
-    ach_events.record_user_activity(stats, now=time.time(), idle_timeout=_IDLE_TIMEOUT)
+    """Record a qualifying depsgraph, save_pre, or render_complete event."""
+    ach_events.record_user_activity(stats, now=_activity_clock(), idle_timeout=_IDLE_TIMEOUT)
 
 
 def _flush_session_time():
-    """Finalize the current activity window (called on save / timer)."""
-    ach_events.flush_session_time(stats, now=time.time(), idle_timeout=_IDLE_TIMEOUT)
+    """Credit an existing window from progress persistence, UI, or timer paths."""
+    ach_events.flush_session_time(stats, now=_activity_clock(), idle_timeout=_IDLE_TIMEOUT)
 
 
 def _ensure_data_dirs():
@@ -259,6 +227,9 @@ def save_data():
 
 def load_data():
     """Load stats and progress from JSON file."""
+    # Loading and migration-triggered saves must not inherit an activity window
+    # from the previous file/session.
+    ach_events.reset_session_tracking(stats, now=_activity_clock())
     if not os.path.exists(DATA_FILE):
         print("[Achievements] Data file not found — new profile")
         return
@@ -272,6 +243,8 @@ def load_data():
         if load_report.migrated or apply_report.migrated:
             print("[Achievements] Migrated persistence schema")
             save_data()
+
+        ach_events.reset_session_tracking(stats, now=_activity_clock())
 
         print(f"[Achievements] Loaded. Achievements: {len(stats.unlocked)}")
     except Exception as e:
@@ -649,8 +622,6 @@ def on_depsgraph_update(scene, depsgraph):
 def on_load_post(dummy=None):
     """Re-load data when a new .blend file is opened."""
     load_data()
-    now = time.time()
-    ach_events.reset_session_tracking(stats, now=now)
     ach_events.reset_scene_snapshots(stats)
 
 
@@ -1149,7 +1120,11 @@ class ACH_OT_ResetAchievements(bpy.types.Operator):
         col.label(text="Действие необратимо.")
 
     def execute(self, context):
-        ach_events.reset_progress(stats, now=time.time())
+        ach_events.reset_progress(
+            stats,
+            activity_now=_activity_clock(),
+            speed_model_now=time.time(),
+        )
         _pending_notifications.clear()
         save_data()
         _tag_redraw_all()
@@ -1256,13 +1231,9 @@ class ACH_OT_AchievementsDialog(bpy.types.Operator):
         rank = LEVEL_TITLES.get(lvl, "")
         xp_box.label(text=f"Ур. {lvl} — {rank}", icon="SOLO_ON")
         xp_box.label(text=f"XP: {xp}")
-        if lvl < 10:
-            bar_len = 12
-            filled = int(lvl_progress * bar_len)
-            bar_str = "\u2588" * filled + "\u2591" * (bar_len - filled)
-            xp_box.label(text=f"{bar_str} {lvl_current}/{lvl_range}")
-        else:
-            xp_box.label(text="MAX")
+        xp_box.label(
+            text=ach_levels.format_level_progress(lvl_progress, lvl_range, lvl_current)
+        )
 
         # Reset progress (testing/dev) — confirmation handled by the operator
         reset_row = sbox.row(align=True)
@@ -1510,9 +1481,7 @@ def register():
 
     _ensure_data_dirs()
     load_data()
-    now = time.time()
-    ach_events.reset_session_tracking(stats, now=now)
-    ach_events.reset_speed_model_tracking(stats, now=now)
+    ach_events.reset_speed_model_tracking(stats, now=time.time())
 
     _register_handlers()
     _register_timers()

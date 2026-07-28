@@ -125,6 +125,34 @@ def main() -> None:
 
     module.register()
     try:
+        expected_bands = (20, 40, 80, 120, 140, 170, 200, 230, 260, 290)
+        runtime_bands = tuple(
+            entry["xp_end"] - entry["xp_start"] for entry in module.XP_LEVELS
+        )
+        if runtime_bands != expected_bands:
+            fail(f"XP level bands drifted: {runtime_bands}")
+
+        original_unlocked = module.stats.unlocked
+        try:
+            module.stats.unlocked = {
+                achievement["id"] for achievement in module.ACHIEVEMENTS_DEF
+            }
+            if module._calc_xp() != 1550:
+                fail(f"full catalog XP did not reach cap: {module._calc_xp()}")
+        finally:
+            module.stats.unlocked = original_unlocked
+
+        pre_cap = module._calc_level(1549)
+        at_cap = module._calc_level(1550)
+        if pre_cap[0] != 10 or pre_cap[2:] != (290, 289):
+            fail(f"level 10 progress drifted before cap: {pre_cap}")
+        if module.ach_levels.format_level_progress(*pre_cap[1:]) == "MAX":
+            fail("level 10 displayed MAX before 1550 XP")
+        if at_cap != (10, 1.0, 0, 0):
+            fail(f"level cap tuple drifted: {at_cap}")
+        if module.ach_levels.format_level_progress(*at_cap[1:]) != "MAX":
+            fail("1550 XP did not display MAX")
+
         if module._tab_prop("TASKS") != "ach_page_tasks":
             fail("TASKS tab page property drifted")
         if module._tab_prop("STORAGE_GEO_NODES") != "ach_page_storage_geo_nodes":

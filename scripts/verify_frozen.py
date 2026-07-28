@@ -17,7 +17,7 @@ DUPLICATE_RETIREMENT_ADR = (
 )
 sys.path.insert(0, str(ROOT))
 
-from achievements import catalog, predicates  # noqa: E402
+from achievements import catalog, levels, predicates  # noqa: E402
 
 USER_DATA_MARKERS = {"achievements_data.json", "BlenderAchievements"}
 VALID_CHECK_TYPES = {"stat", "complex"}
@@ -40,6 +40,24 @@ FROZEN_LESSON_CATEGORY_COUNTS = {
     "RENDERING": 1,
 }
 FROZEN_DIFFICULTY_COUNTS = {"easy": 10, "medium": 40, "hard": 55}
+FROZEN_DIFFICULTY_XP = {"easy": 5, "medium": 10, "hard": 20}
+FROZEN_LEVEL_BANDS = (20, 40, 80, 120, 140, 170, 200, 230, 260, 290)
+FROZEN_LEVEL_STARTS = (0, 20, 60, 140, 260, 400, 570, 770, 1000, 1260)
+FROZEN_LEVEL_ENDS = (20, 60, 140, 260, 400, 570, 770, 1000, 1260, 1550)
+FROZEN_LEVEL_CAP = 1550
+FROZEN_LEVEL_TITLES = {
+    1: "Новичок",
+    2: "Начинающий",
+    3: "Ньюблинг",
+    4: "Ученик",
+    5: "Умелец",
+    6: "Мастеровой",
+    7: "Эксперт",
+    8: "Виртуоз",
+    9: "Гуру",
+    10: "Легенда",
+}
+LEGACY_LEVEL_STARTS = (0, 20, 60, 140, 300, 620, 1260, 2540, 5100, 10220)
 FROZEN_REWARD_TYPE_COUNTS = {
     "none": 82,
     "tutorial": 2,
@@ -297,12 +315,66 @@ def attribute_path(node: ast.AST) -> str | None:
     return None
 
 
-def assignment_dict(module: ast.Module) -> dict[str, Any]:
-    names = [
-        "bl_info",
-        "DIFFICULTY_XP",
-        "LEVEL_TITLES",
+def top_level_assignment_paths(module: ast.Module, name: str) -> list[str | None]:
+    """Return attribute paths assigned to one exact top-level runtime name."""
+    return [
+        attribute_path(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in node.targets
+        )
     ]
+
+
+def call_paths_in(node: ast.AST | None) -> set[str]:
+    if node is None:
+        return set()
+    return {
+        path
+        for child in ast.walk(node)
+        if isinstance(child, ast.Call)
+        if (path := attribute_path(child.func)) is not None
+    }
+
+
+def top_level_function(module: ast.Module, name: str) -> ast.FunctionDef | None:
+    return next(
+        (
+            node
+            for node in module.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ),
+        None,
+    )
+
+
+def class_method(
+    module: ast.Module, class_name: str, method_name: str
+) -> ast.FunctionDef | None:
+    class_node = next(
+        (
+            node
+            for node in module.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        ),
+        None,
+    )
+    if class_node is None:
+        return None
+    return next(
+        (
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef) and node.name == method_name
+        ),
+        None,
+    )
+
+
+def assignment_dict(module: ast.Module) -> dict[str, Any]:
+    names = ["bl_info"]
     values = {name: literal_assignment(module, name) for name in names}
     values.update(
         {
@@ -311,10 +383,41 @@ def assignment_dict(module: ast.Module) -> dict[str, Any]:
             "ACH_CATEGORIES": catalog.ACH_CATEGORIES,
             "LESSON_CATEGORIES": catalog.LESSON_CATEGORIES,
             "REWARD_CATEGORIES": catalog.REWARD_CATEGORIES,
+            "DIFFICULTY_XP": levels.DIFFICULTY_XP,
+            "XP_LEVELS": levels.XP_LEVELS,
+            "LEVEL_TITLES": levels.LEVEL_TITLES,
         }
     )
     values.update(constant_assignments(module, set(FROZEN_CONSTANTS)))
     return values
+
+
+def level_root_aliases(module: ast.Module) -> dict[str, str]:
+    expected_names = {"DIFFICULTY_XP", "XP_LEVELS", "LEVEL_TITLES"}
+    aliases: dict[str, str] = {}
+    for node in module.body:
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Attribute):
+            continue
+        if not isinstance(node.value.value, ast.Name) or node.value.value.id != "ach_levels":
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in expected_names:
+                aliases[target.id] = node.value.attr
+    return aliases
+
+
+def reachable_xp_totals(
+    achievements: list[dict[str, Any]], difficulty_xp: dict[str, int]
+) -> set[int]:
+    reachable = {0}
+    for achievement in achievements:
+        award = difficulty_xp[achievement["difficulty"]]
+        reachable |= {xp + award for xp in tuple(reachable)}
+    return reachable
+
+
+def level_from_starts(xp: int, starts: tuple[int, ...]) -> int:
+    return max(level for level, start in enumerate(starts, start=1) if xp >= start)
 
 
 def imports_catalog_definitions(module: ast.Module) -> bool:
@@ -415,11 +518,60 @@ def verify_addon_contract() -> None:
     )
     record("achievement count is 105", len(achievements) == 105, str(len(achievements)))
     record("lesson count is 9", len(lessons) == 9, str(len(lessons)))
+    record(
+        "root level compatibility aliases frozen",
+        level_root_aliases(module)
+        == {
+            "DIFFICULTY_XP": "DIFFICULTY_XP",
+            "XP_LEVELS": "XP_LEVELS",
+            "LEVEL_TITLES": "LEVEL_TITLES",
+        },
+    )
+    record(
+        "difficulty XP awards frozen",
+        values["DIFFICULTY_XP"] == FROZEN_DIFFICULTY_XP,
+        str(values["DIFFICULTY_XP"]),
+    )
+    level_entries = values["XP_LEVELS"]
+    level_starts = tuple(entry.get("xp_start") for entry in level_entries)
+    level_ends = tuple(entry.get("xp_end") for entry in level_entries)
+    level_bands = tuple(
+        end - start for start, end in zip(level_starts, level_ends, strict=True)
+    )
+    record(
+        "XP level table shape frozen",
+        len(level_entries) == 10
+        and all(
+            set(entry) == {"level", "xp_start", "xp_end"}
+            and entry["level"] == level
+            for level, entry in enumerate(level_entries, start=1)
+        ),
+    )
+    record(
+        "XP level bands frozen",
+        level_bands == FROZEN_LEVEL_BANDS,
+        str(level_bands),
+    )
+    record(
+        "XP level starts and ends frozen",
+        level_starts == FROZEN_LEVEL_STARTS and level_ends == FROZEN_LEVEL_ENDS,
+        f"starts={level_starts}, ends={level_ends}",
+    )
+    record(
+        "level titles frozen",
+        values["LEVEL_TITLES"] == FROZEN_LEVEL_TITLES,
+    )
     frozen_constants = {key: values[key] for key in FROZEN_CONSTANTS}
     record(
         "UI/runtime constants frozen",
         frozen_constants == FROZEN_CONSTANTS,
         ", ".join(f"{key}={value}" for key, value in sorted(frozen_constants.items())),
+    )
+    activity_clock_paths = top_level_assignment_paths(module, "_activity_clock")
+    record(
+        "active-time clock uses time.monotonic",
+        activity_clock_paths == ["time.monotonic"],
+        ", ".join(path or "<non-attribute>" for path in activity_clock_paths),
     )
     functions = {node.name for node in module.body if isinstance(node, ast.FunctionDef)}
     classes = {node.name for node in module.body if isinstance(node, ast.ClassDef)}
@@ -432,6 +584,20 @@ def verify_addon_contract() -> None:
         if isinstance(node, ast.Call)
         if (path := attribute_path(node.func)) is not None
     }
+    record(
+        "root delegates XP aggregation to pure helper",
+        "ach_levels.calculate_xp" in call_paths_in(top_level_function(module, "_calc_xp")),
+    )
+    record(
+        "root delegates XP level calculation to pure helper",
+        "ach_levels.calculate_level"
+        in call_paths_in(top_level_function(module, "_calc_level")),
+    )
+    record(
+        "dialog uses cap-aware XP progress formatter",
+        "ach_levels.format_level_progress"
+        in call_paths_in(class_method(module, "ACH_OT_AchievementsDialog", "draw")),
+    )
     record(
         "runtime opens native extension management without self-uninstall",
         "bpy.ops.screen.userpref_show" in call_paths
@@ -575,6 +741,50 @@ def verify_addon_contract() -> None:
         difficulty_counts == FROZEN_DIFFICULTY_COUNTS,
         ", ".join(f"{key}={value}" for key, value in sorted(difficulty_counts.items())),
     )
+    all_achievement_ids = {item["id"] for item in achievements}
+    catalog_max_xp = levels.calculate_xp(achievements, all_achievement_ids)
+    summed_catalog_xp = sum(
+        values["DIFFICULTY_XP"][item["difficulty"]] for item in achievements
+    )
+    record(
+        "catalog maximum XP equals level cap",
+        catalog_max_xp == summed_catalog_xp == FROZEN_LEVEL_CAP
+        and levels.MAX_XP == FROZEN_LEVEL_CAP
+        and level_ends[-1] == FROZEN_LEVEL_CAP,
+        (
+            f"catalog={catalog_max_xp}, summed={summed_catalog_xp}, "
+            f"helper={levels.MAX_XP}, table={level_ends[-1]}"
+        ),
+    )
+    reachable_xp = reachable_xp_totals(achievements, values["DIFFICULTY_XP"])
+    record(
+        "catalog XP state space is fully reachable",
+        reachable_xp == set(range(0, FROZEN_LEVEL_CAP + 1, 5)),
+        f"states={len(reachable_xp)}",
+    )
+    record(
+        "all ten level starts are reachable",
+        set(FROZEN_LEVEL_STARTS) <= reachable_xp,
+    )
+    level_deltas = [
+        levels.calculate_level(xp)[0] - level_from_starts(xp, LEGACY_LEVEL_STARTS)
+        for xp in sorted(reachable_xp)
+    ]
+    record(
+        "level rebalance never lowers existing reachable progress",
+        min(level_deltas) >= 0 and max(level_deltas) <= 3,
+        f"delta={min(level_deltas)}..{max(level_deltas)}",
+    )
+    pre_cap = levels.calculate_level(FROZEN_LEVEL_CAP - 1)
+    at_cap = levels.calculate_level(FROZEN_LEVEL_CAP)
+    record(
+        "level ten progresses until exact MAX cap",
+        pre_cap[0] == 10
+        and pre_cap[2:] == (290, 289)
+        and at_cap == (10, 1.0, 0, 0)
+        and max(reachable_xp - {FROZEN_LEVEL_CAP}) == FROZEN_LEVEL_CAP - 5,
+        f"pre_cap={pre_cap}, at_cap={at_cap}",
+    )
     reward_type_counts = Counter(item.get("reward_type") for item in achievements)
     record(
         "reward type counts frozen",
@@ -680,6 +890,12 @@ def verify_repo_contract() -> None:
             "ACH_OT_ApplyReward",
             "_check_complex_step",
             "Steam-style bottom-left GPU overlay",
+            "ADR 0005",
+            "non-refreshing 120-second activity window",
+            "open-day/session tracker",
+            "`achievements/levels.py`",
+            "`20, 40, 80, 120, 140, 170, 200, 230, 260, 290`",
+            "`MAX` appears only at `1550`",
         ]
         missing = [marker for marker in required_markers if marker not in text]
         record("frozen application contract covers design and functions", not missing, ", ".join(missing))

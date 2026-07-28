@@ -114,8 +114,12 @@ def main() -> None:
 
         data.pop("schema_version", None)
         data["unlock_hashes"] = {}
+        data["stats"]["time_spent"] = 42
         data_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         module.stats.unlock_hashes = {}
+        module.stats._last_activity = 100.0
+        module.stats._last_accounted_activity = 100.0
+        module._activity_clock = lambda: 1_000.0
         module.load_data()
         if "first_vertex" not in module.stats.unlock_hashes:
             fail("load_data did not migrate missing unlock hash")
@@ -124,6 +128,10 @@ def main() -> None:
         migrated = json.loads(data_path.read_text(encoding="utf-8"))
         if migrated.get("schema_version") != "1.0.0":
             fail("load_data did not persist schema_version migration")
+        if migrated["stats"]["time_spent"] != 42:
+            fail(f"migration save accrued stale activity: {migrated['stats']['time_spent']}")
+        if module.stats._last_activity != 0.0 or module.stats._last_accounted_activity != 0.0:
+            fail("load_data left a runtime activity window open")
 
         data_path.write_text("{broken json", encoding="utf-8")
         module.stats.vertices_created = 999

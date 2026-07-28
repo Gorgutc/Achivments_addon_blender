@@ -61,6 +61,8 @@ Static verifier rules:
 - Validate 105 achievements and 9 lessons.
 - Validate unique achievement, lesson, and complex IDs.
 - Validate category, stat key, difficulty, reward, and lesson references.
+- Validate exact XP awards `5/10/20`, bands `20/40/80/120/140/170/200/230/260/290`, starts, level titles, and cap `1550` through the pure `achievements/levels.py` source and root compatibility aliases.
+- Recompute catalog maximum XP, require all ten starts and the complete `0..1550` five-point state space to be reachable, and enforce no legacy downlevel with maximum promotion `+3`.
 - Validate strict catalog `(complex_id, step_check)` to predicate-registry bijection.
 - Require `achievements_v01 (4).py` to be absent and preserve its recovery evidence in ADR 0002.
 - Validate version `0.2.2`, Blender minimum `(5, 0, 0)`, and 105-achievement active text.
@@ -71,6 +73,11 @@ Static verifier rules:
 - Validate that real user progress files are not tracked.
 - Validate that sync helpers are present as tracked infra and covered by normal unit tests.
 
+Level unit rules:
+- Cover every level start and end boundary, including `1260` as level-10 progress, `1549` as `289/290`, and exact `1550` as the only `MAX` tuple.
+- Prove only the full `105/105` catalog reaches `1550`, while every proper subset remains below cap.
+- Prove XP/level stay derived and absent from the current persistence payload; no schema migration is introduced.
+
 Blender smoke rules:
 - Always run with temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES`.
 - Use background mode and factory startup.
@@ -80,7 +87,7 @@ Blender smoke rules:
 - Verify factory defaults do not unlock `subsurface_skin` or `denoiser_render`, only exact active Subsurface Weight matches, and denoiser unlock requires the supplied completed Cycles-render scene.
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
 - Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
-- Verify UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
+- Verify root XP aliases, level-10 progress through `1549`, exact-cap `MAX` at `1550`, UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
 - For a release candidate, run extension validate/build/server-generate plus ZIP install/enable, namespace-correct import, native extension-management routing, register/unregister, and external Blender-owned removal on Blender 5.0.1, 5.1.2, and 5.2.0. Removal must preserve a sentinel `~/BlenderAchievements/` tree in the disposable profile.
 
 Sync stub rules:

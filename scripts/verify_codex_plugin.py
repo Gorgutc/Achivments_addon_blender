@@ -52,10 +52,33 @@ REQUIRED_DOCS = [
     "docs/agent/adrs/0002-retire-legacy-runtime-duplicate.md",
     "docs/agent/adrs/0003-safe-extension-removal-and-render-events.md",
     "docs/agent/adrs/0004-extension-namespace-and-files-permission.md",
+    "docs/agent/adrs/0005-active-time-monotonic-window.md",
+    "docs/agent/adrs/0006-xp-level-reachability.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
 ]
+HISTORICAL_DOCS = {
+    "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
+}
+PREDICATE_COMMAND = "uv run python scripts/verify_predicates.py"
+README_FAST_GATE_BLOCK = """```bash
+uv run python scripts/verify_frozen.py
+uv run python scripts/verify_codex_plugin.py
+uv run python scripts/verify_predicates.py
+uv run ruff check .
+uv run pytest
+```"""
+CI_PREDICATE_STEP = """      - name: Verify predicate registry
+        run: uv run python scripts/verify_predicates.py"""
+QUALITY_CI_MIRROR = (
+    "mirrors `verify_frozen`, `verify_codex_plugin`, `verify_predicates`, "
+    "`ruff`, and `pytest` on Python 3.13"
+)
+PACKAGING_FAST_GATE = (
+    "Run the fast gate: `verify_frozen`, `verify_codex_plugin`, "
+    "`verify_predicates`, `ruff`, and `pytest`."
+)
 REQUIRED_HOOKS = [
     ".codex/hooks/session-start.py",
     ".codex/hooks/user-prompt-nudge.py",
@@ -77,6 +100,7 @@ REQUIRED_INFRA_FILES = [
     "achievements/events.py",
     "achievements/integrity.py",
     "achievements/lifecycle.py",
+    "achievements/levels.py",
     "achievements/metadata.py",
     "achievements/persistence.py",
     "achievements/predicates/__init__.py",
@@ -102,6 +126,7 @@ REQUIRED_INFRA_FILES = [
     "tests/test_catalog.py",
     "tests/test_infra_scripts.py",
     "tests/test_integrity.py",
+    "tests/test_levels.py",
     "tests/test_predicates.py",
     "tests/test_release_packaging.py",
     "tests/test_engine.py",
@@ -225,7 +250,7 @@ def verify_docs() -> None:
         ROOT / ".codex" / "hooks.json",
         ROOT / ".agents" / "plugins" / "marketplace.json",
         PLUGIN_ROOT / ".codex-plugin" / "plugin.json",
-        *[ROOT / doc for doc in REQUIRED_DOCS],
+        *[ROOT / doc for doc in REQUIRED_DOCS if doc not in HISTORICAL_DOCS],
         *[ROOT / hook for hook in REQUIRED_HOOKS],
         *[ROOT / workflow for workflow in REQUIRED_WORKFLOWS],
         *[ROOT / ".codex" / "agents" / f"{agent}.toml" for agent in REQUIRED_AGENTS],
@@ -242,6 +267,109 @@ def verify_docs() -> None:
                     stale.append(f"{path.relative_to(ROOT)}:{lineno}:{term}")
     record("active instructions avoid stale web-stack rules", not stale, ", ".join(stale[:8]))
 
+    roadmap = ROOT / next(iter(HISTORICAL_DOCS))
+    roadmap_text = roadmap.read_text(encoding="utf-8") if roadmap.is_file() else ""
+    roadmap_nonempty = [line for line in roadmap_text.splitlines() if line.strip()]
+    record(
+        "historical roadmap is explicitly superseded",
+        len(roadmap_nonempty) >= 2
+        and roadmap_nonempty[0] == "# Achievements Iterative Roadmap Implementation Plan"
+        and roadmap_nonempty[1].startswith(
+            "> **SUPERSEDED — HISTORICAL PLAN ONLY.**"
+        )
+        and "ADR 0002 retired `achievements_v01 (4).py`" in roadmap_nonempty[1],
+    )
+
+    context_keeper = SKILL_ROOT / "achievements-context-keeper" / "SKILL.md"
+    context_text = (
+        context_keeper.read_text(encoding="utf-8") if context_keeper.is_file() else ""
+    )
+    record(
+        "context keeper records the sole runtime and retired duplicate",
+        "Root `__init__.py` is the sole runtime" in context_text
+        and "ADR 0002 retired `achievements_v01 (4).py`" in context_text
+        and "Duplicate add-on file exists" not in context_text,
+    )
+
+    frozen_skill = SKILL_ROOT / "achievements-frozen-decisions" / "SKILL.md"
+    frozen_skill_text = (
+        frozen_skill.read_text(encoding="utf-8") if frozen_skill.is_file() else ""
+    )
+    record(
+        "frozen decisions skill includes both correctness ADRs",
+        "ADR 0005" in frozen_skill_text
+        and "non-refreshing 120-second monotonic activity window" in frozen_skill_text
+        and "runtime anchors stay out of JSON" in frozen_skill_text
+        and "ADR 0006" in frozen_skill_text
+        and "cap `1550`" in frozen_skill_text,
+    )
+
+    readme = ROOT / "README.md"
+    readme_text = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+    development_section = (
+        readme_text.split("## Проверка разработки", maxsplit=1)[1].split(
+            "\n## ", maxsplit=1
+        )[0]
+        if "## Проверка разработки" in readme_text
+        else ""
+    )
+    record(
+        "README fast gate includes predicate verifier",
+        README_FAST_GATE_BLOCK in development_section,
+    )
+
+    fast_gate = ROOT / ".github" / "workflows" / "fast-gate.yml"
+    fast_gate_text = fast_gate.read_text(encoding="utf-8") if fast_gate.is_file() else ""
+    plugin_index = fast_gate_text.find(
+        "run: uv run python scripts/verify_codex_plugin.py"
+    )
+    predicate_index = fast_gate_text.find(CI_PREDICATE_STEP)
+    ruff_index = fast_gate_text.find("run: uv run ruff check .")
+    record(
+        "CI fast gate includes active predicate verifier step",
+        plugin_index >= 0
+        and predicate_index > plugin_index
+        and ruff_index > predicate_index,
+    )
+
+    quality = ROOT / "docs" / "agent" / "quality-tooling.md"
+    quality_text = quality.read_text(encoding="utf-8") if quality.is_file() else ""
+    record(
+        "quality tooling CI mirror includes predicate verifier",
+        QUALITY_CI_MIRROR in quality_text,
+    )
+
+    session_start = ROOT / ".codex" / "hooks" / "session-start.py"
+    session_text = (
+        session_start.read_text(encoding="utf-8") if session_start.is_file() else ""
+    )
+    record(
+        "session-start pointer includes predicate verifier",
+        PREDICATE_COMMAND in session_text,
+    )
+
+    packaging = ROOT / "docs" / "agent" / "packaging-release.md"
+    packaging_text = packaging.read_text(encoding="utf-8") if packaging.is_file() else ""
+    record(
+        "release guidance includes predicate verifier",
+        PACKAGING_FAST_GATE in packaging_text,
+    )
+
+    current_handoff = ROOT / "docs" / "handoff" / "current.md"
+    current_text = (
+        current_handoff.read_text(encoding="utf-8")
+        if current_handoff.is_file()
+        else ""
+    )
+    record(
+        "current handoff tracks integrated correctness work",
+        "codex/active-time-level-integration" in current_text
+        and "787857d1ca6ef32be5fa81b708ef9b1e833f226e" in current_text
+        and "966ba6abc016454680d22179d93319686b8bbd6d" in current_text
+        and PREDICATE_COMMAND in current_text
+        and "Draft PR #15" not in current_text,
+    )
+
 
 def verify_extension_contract() -> None:
     manifest = ROOT / "blender_manifest.toml"
@@ -251,6 +379,7 @@ def verify_extension_contract() -> None:
     engine = ROOT / "achievements" / "engine.py"
     events = ROOT / "achievements" / "events.py"
     lifecycle = ROOT / "achievements" / "lifecycle.py"
+    levels = ROOT / "achievements" / "levels.py"
     persistence = ROOT / "achievements" / "persistence.py"
     integrity = ROOT / "achievements" / "integrity.py"
     predicates = ROOT / "achievements" / "predicates"
@@ -265,6 +394,7 @@ def verify_extension_contract() -> None:
     record("engine helpers exist: achievements/engine.py", engine.is_file())
     record("event helpers exist: achievements/events.py", events.is_file())
     record("lifecycle helpers exist: achievements/lifecycle.py", lifecycle.is_file())
+    record("level helpers exist: achievements/levels.py", levels.is_file())
     record("persistence helpers exist: achievements/persistence.py", persistence.is_file())
     record("integrity helpers exist: achievements/integrity.py", integrity.is_file())
     record("predicate registry exists: achievements/predicates", predicates.is_dir())
