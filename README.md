@@ -67,6 +67,7 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 ```bash
 uv run python scripts/verify_frozen.py
 uv run python scripts/verify_codex_plugin.py
+uv run python scripts/verify_predicates.py
 uv run ruff check .
 uv run pytest
 ```
@@ -86,7 +87,7 @@ uv run python scripts/run_blender_smoke.py --suite ui_visual
 
 GitHub Actions mirrors the local gates:
 
-- `.github/workflows/fast-gate.yml` runs `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
+- `.github/workflows/fast-gate.yml` runs `verify_frozen`, `verify_codex_plugin`, `verify_predicates`, `ruff`, and `pytest` on Python 3.13.
 - `.github/workflows/blender-smoke.yml` runs every Blender smoke suite on a fixed blocking matrix: Blender 5.0.1, 5.1.2, and 5.2.0.
 - The matrix contains no optional canary, repository download variable, skipped row, or `continue-on-error` target.
 
@@ -139,14 +140,13 @@ The audited release package is deliberately published to `reports/extension/achi
 | `__init__.py`: `NOTIFY_*` | Уведомления | Размер/длительность уведомлений |
 | `achievements/integrity.py` | Локальный unlock integrity marker | Сохранить совместимый salt/username/SHA-256 формат |
 | `achievements/catalog.py` | Категории, `ACHIEVEMENTS_DEF`, `LESSONS_DEF`, валидаторы каталога | Добавить/переименовать категории, достижения, уроки |
-| `achievements/events.py` | Active-time, session, scene snapshot helpers | Править учет активности без импорта `bpy` |
+| `achievements/events.py` | Active-time window, session, scene snapshot helpers | Править учёт активности без импорта `bpy` |
 | `achievements/lifecycle.py` | Idempotent registration helpers | Править hot-reload lifecycle без прямого изменения handler/timer wiring |
 | `achievements/persistence.py` | Schema migration, atomic JSON writes, corrupt recovery | Править сохранение прогресса без импорта `bpy` |
 | `achievements/sync.py` | Offline queue, disabled backend, deterministic conflicts | Plan future cloud sync without network calls in normal add-on use |
-| `__init__.py`: `DIFFICULTY_XP` | Очки XP | Настроить очки за сложность |
-| `__init__.py`: `LEVEL_TITLES` | Звания уровней | Изменить русские названия уровней |
+| `achievements/levels.py` | Pure XP/level contract; root сохраняет aliases `DIFFICULTY_XP`, `XP_LEVELS`, `LEVEL_TITLES` | Менять баланс только новым явным решением владельца |
 | `__init__.py`: `_difficulty_label()` | Метки сложности | Изменить подписи на карточках |
-| `__init__.py`: `_IDLE_TIMEOUT` | Тайм-аут бездействия | Изменить интервал активной работы |
+| `__init__.py`: `_IDLE_TIMEOUT` | Непродлеваемое окно активности, сейчас 120 секунд | Изменить интервал только отдельным решением |
 | `achievements/predicates/` | Pure complex predicates и registry | Добавить/изменить проверку сцены без `bpy` |
 
 ---
@@ -190,7 +190,7 @@ ACH_CATEGORIES = [
 
 ### 1.3 Звания уровней
 
-**Корневой `__init__.py`, символ `LEVEL_TITLES`:**
+**`achievements/levels.py`, символ `LEVEL_TITLES` (корень экспортирует compatibility alias):**
 ```python
 LEVEL_TITLES = {
     1: "Новичок",      2: "Начинающий",    3: "Ньюблинг",
@@ -410,6 +410,10 @@ grep -n '"url"' achievements/catalog.py
 | `renders_completed` | Завершённые рендеры                |
 | `time_spent`        | Время активной работы (в секундах) |
 
+`time_spent` начисляется по ADR 0005: первое реальное Blender-событие открывает непродлеваемое 120-секундное окно, а последующие реальные события объединяют перекрывающиеся окна. Timer, сохранение прогресса, register/load и UI draw сами не являются активностью; flush только один раз начисляет ещё не учтённую часть открытого окна. Runtime timestamps используют monotonic clock и не входят в JSON. Старый прогресс сохраняется forward-only при неизменной схеме `1.0.0`.
+
+`daily_sessions` сохраняет прежнее отдельное значение open-day/session tracker: flush может записать календарный день без начисления `time_spent`. Изменение streak-семантики требует отдельного решения.
+
 ### Комплексное достижение (проверка сцены)
 
 1. Добавьте словарь с `"check_type": "complex"` и `"stat_key": "_complex"`
@@ -430,13 +434,16 @@ def has_my_custom_state(context):
 
 ## 6. XP-СИСТЕМА
 
-| Параметр          | Файл          | Описание                                     |
-|-------------------|---------------|----------------------------------------------|
-| `DIFFICULTY_XP`   | `__init__.py` | Очки за сложность: easy=5, medium=10, hard=20|
-| `XP_LEVELS`       | `__init__.py` | Пороги уровней (удваиваются от 20)           |
-| `LEVEL_TITLES`    | `__init__.py` | Русские звания для каждого уровня            |
+Source of truth — pure `achievements/levels.py`; корневой `__init__.py` сохраняет совместимые aliases `DIFFICULTY_XP`, `XP_LEVELS` и `LEVEL_TITLES` для Blender UI.
 
-Итого: уровень 10 требует 20460 XP суммарно.
+| Параметр | Утверждённый контракт |
+|---|---|
+| XP за сложность | `easy=5`, `medium=10`, `hard=20` |
+| Ширины уровней | `20, 40, 80, 120, 140, 170, 200, 230, 260, 290` |
+| Старты уровней 1–10 | `0, 20, 60, 140, 260, 400, 570, 770, 1000, 1260` |
+| Полный cap | `1550 XP` |
+
+Level 10 продолжается от `1260` до `1549 XP`; `MAX` появляется только при точном cap `1550`, который требует `105/105` достижений. XP вычисляется из текущего набора `unlocked` и не сохраняется отдельным полем, поэтому migration и изменение schema `1.0.0` не нужны. На всех достижимых XP новый баланс не понижает уровень и повышает его максимум на три относительно прежней шкалы. Решение заморожено в ADR 0006.
 
 ---
 

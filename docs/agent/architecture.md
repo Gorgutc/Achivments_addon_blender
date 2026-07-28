@@ -6,6 +6,7 @@ Frozen source facts:
 - Canonical runtime entrypoint: `__init__.py`.
 - Catalog source of truth: `achievements/catalog.py`.
 - Rule/progress evaluation helper source: `achievements/engine.py`.
+- XP/level calculation and formatting source: `achievements/levels.py`; root names remain compatibility aliases.
 - Activity/session helper source: `achievements/events.py`.
 - Registration lifecycle helper source: `achievements/lifecycle.py`.
 - JSON persistence helper source: `achievements/persistence.py`.
@@ -29,3 +30,7 @@ The 0.2.0 technical closeout aligns `bl_info` with Blender 5.0+, removes stale 1
 The 0.2.1 maintenance slice adds crash-safe navigation to Blender-owned extension removal, keeps user progress outside the extension lifecycle, corrects Subsurface Weight detection, and makes denoiser completion an explicit render event. Persistence schema and all 105 catalog IDs remain unchanged.
 
 The 0.2.2 policy closeout keeps support imports inside Blender's installed extension namespace, removes the runtime `sys.path` alias, and declares the narrow file permission needed for local progress and reward assets. ADR 0004 records these loader and manifest boundaries. It does not change catalog, persistence, predicates, UI, reward fallbacks, or the disabled production-networking state.
+
+The 2026-07-28 active-time correctness slice uses the ADR 0005 non-refreshing 120-second activity window. Existing real Blender events open or extend a union of monotonic runtime-only windows; timer/`save_data` flushes credit each whole second once without becoming activity. Blender `save_pre` remains a real event. Register/load/reset and rollback clear the runtime anchors. Persistence remains schema `1.0.0` and preserves historical progress forward-only. `daily_sessions` remains the separate open-day tracker, and speed-model/calendar logic stays on wall clock.
+
+The owner-approved ADR 0006 balance slice keeps difficulty awards at `5/10/20` and replaces the unreachable exponential scale with exact bands `20/40/80/120/140/170/200/230/260/290`. Their starts are `0/20/60/140/260/400/570/770/1000/1260`, the final cap equals the catalog maximum `1550 XP`, level 10 remains in progress through `1549`, and only `105/105` displays `MAX`. XP remains derived from unlocked catalog IDs, so persistence schema `1.0.0` and existing payloads do not migrate. Across every reachable XP total, the new level never decreases and rises by at most three.

@@ -36,6 +36,9 @@ jobs:
       - name: Verify Codex plugin contract
         run: uv run python scripts/verify_codex_plugin.py
 
+      - name: Verify predicate registry
+        run: uv run python scripts/verify_predicates.py
+
       - name: Run ruff
         run: uv run ruff check .
 

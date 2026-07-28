@@ -97,6 +97,11 @@ def test_verify_frozen_passes_current_addon_contract():
     assert_clean_verifier(result)
     assert "achievement ids unique" in result.stdout
     assert "complex ids covered" in result.stdout
+    assert "active-time clock uses time.monotonic" in result.stdout
+    assert "catalog maximum XP equals level cap" in result.stdout
+    assert "catalog XP state space is fully reachable" in result.stdout
+    assert "level rebalance never lowers existing reachable progress" in result.stdout
+    assert "level ten progresses until exact MAX cap" in result.stdout
 
 
 def test_archived_catalog_blob_check_is_stable_for_windows_crlf(tmp_path):
@@ -138,6 +143,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "engine helpers exist: achievements/engine.py" in result.stdout
     assert "event helpers exist: achievements/events.py" in result.stdout
     assert "lifecycle helpers exist: achievements/lifecycle.py" in result.stdout
+    assert "level helpers exist: achievements/levels.py" in result.stdout
     assert "persistence helpers exist: achievements/persistence.py" in result.stdout
     assert "rewards helpers exist: achievements/rewards.py" in result.stdout
     assert "sync helpers exist: achievements/sync.py" in result.stdout
@@ -146,8 +152,19 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "docs/handoff/iteration-handoff-template.md" in result.stdout
     assert "docs/handoff/current.md" in result.stdout
     assert "docs/agent/adrs/0004-extension-namespace-and-files-permission.md" in result.stdout
+    assert "docs/agent/adrs/0005-active-time-monotonic-window.md" in result.stdout
+    assert "docs/agent/adrs/0006-xp-level-reachability.md" in result.stdout
     assert "workflow exists: .github/workflows/fast-gate.yml" in result.stdout
     assert "workflow exists: .github/workflows/blender-smoke.yml" in result.stdout
+    assert "historical roadmap is explicitly superseded" in result.stdout
+    assert "context keeper records the sole runtime and retired duplicate" in result.stdout
+    assert "frozen decisions skill includes both correctness ADRs" in result.stdout
+    assert "README fast gate includes predicate verifier" in result.stdout
+    assert "CI fast gate includes active predicate verifier step" in result.stdout
+    assert "quality tooling CI mirror includes predicate verifier" in result.stdout
+    assert "session-start pointer includes predicate verifier" in result.stdout
+    assert "release guidance includes predicate verifier" in result.stdout
+    assert "current handoff tracks integrated correctness work" in result.stdout
 
 
 def test_find_blender_reports_a_usable_executable(tmp_path):
@@ -366,10 +383,22 @@ def test_iteration_11_github_actions_workflows_are_present_and_match_contract():
         "astral-sh/setup-uv@v5",
         "uv run python scripts/verify_frozen.py",
         "uv run python scripts/verify_codex_plugin.py",
+        "uv run python scripts/verify_predicates.py",
         "uv run ruff check .",
         "uv run pytest",
     ):
         assert phrase in fast_text
+    predicate_step = (
+        "      - name: Verify predicate registry\n"
+        "        run: uv run python scripts/verify_predicates.py"
+    )
+    assert predicate_step in fast_text
+    assert fast_text.index("run: uv run python scripts/verify_codex_plugin.py") < (
+        fast_text.index(predicate_step)
+    )
+    assert fast_text.index(predicate_step) < fast_text.index(
+        "run: uv run ruff check ."
+    )
 
     blender_text = blender_workflow.read_text(encoding="utf-8")
     for phrase in (
@@ -416,6 +445,10 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         assert path.is_file(), f"missing required artifact: {path.relative_to(ROOT)}"
 
     plan_text = plan.read_text(encoding="utf-8")
+    plan_nonempty = [line for line in plan_text.splitlines() if line.strip()]
+    assert plan_nonempty[0] == "# Achievements Iterative Roadmap Implementation Plan"
+    assert plan_nonempty[1].startswith("> **SUPERSEDED — HISTORICAL PLAN ONLY.**")
+    assert "ADR 0002 retired `achievements_v01 (4).py`" in plan_nonempty[1]
     for phrase in (
         "## Sources",
         "## Product Concept",
@@ -496,41 +529,32 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Achievements 0.2.2 — Blender Extension Policy Compliance",
-        "`codex/extension-policy-022`",
-        "`main@ba2b5c25b0164b61e7d8dcb55b01bd70176a9aa5`",
-        "pull/14",
-        "PR #14 (`codex/backlog-technical-closeout`) is confirmed merged",
-        "pull/15",
-        "Draft PR #15",
-        "04c2b02bd710d5bde0d28f3ad966a0f4d0fecae3",
+        "Achievements — Active-Time and XP Integration",
+        "`codex/active-time-level-integration`",
+        "`main@64076a6f7e6dde494ac9435627bdcebe2e7f9a46`",
+        "PR #15 is already merged",
+        "787857d1ca6ef32be5fa81b708ef9b1e833f226e",
+        "966ba6abc016454680d22179d93319686b8bbd6d",
+        "ADR 0005",
+        "ADR 0006",
+        "non-refreshing 120-second monotonic window",
+        "exact `1550 XP` cap",
+        "Root compatibility aliases and wrappers remain",
+        "sole runtime",
+        "SUPERSEDED — HISTORICAL PLAN ONLY",
+        "uv run python scripts/verify_predicates.py",
         "Blender 5.0.1/5.1.2/5.2.0",
-        "`reports/extension/achievements-0.2.2.zip`",
-        "14defe9794539c8ffe57c1b9d6675a8662564d32",
-        "7C564D30C10B650B0F004FC857424626F9B06E1C331609C619E39899D658617F",
-        "`62,724` bytes",
-        "`22` regular allowlisted members",
-        "`237,778` uncompressed bytes",
-        "Canonical member SHA-256 map",
-        "blocking checks for implementation commit",
         "`SCHEMA_VERSION = \"1.0.0\"`",
-        "ADR 0002",
-        "ADR 0004",
-        "Store progress and load local reward assets",
-        "exact 65-ID/85-pair catalog bijection",
-        "full GPL-3.0-or-later `LICENSE`",
-        "raw LF SHA-256 `9CB06CA4",
-        "Windows CRLF SHA-256 `62DDB016",
-        "219 referenced PNG files",
-        "11 placeholder tutorial URLs",
-        "20 reward `.blend` names",
-        "Owner Acceptance For 0.2.1",
-        "final Blender-owned `Uninstall` completed successfully",
-        "Do not merge, tag, create a GitHub Release",
-        "modify any `instance_matcher` information",
+        "219 licensed PNG files",
+        "11 approved tutorial URLs",
+        "20 licensed reward `.blend` files",
+        "does not authorize either",
     ):
         assert phrase in current_text
     assert "BLENDER_5_2_ALPHA_URL" not in current_text
+    assert "Draft PR #15" not in current_text
+    assert "`codex/extension-policy-022`" not in current_text
+    assert "Canonical member SHA-256 map" not in current_text
     assert "Continue after Iteration 12 merge" not in current_text
     assert "must be filled in before delivery" not in current_text
     assert "pending committed-Git canonical ZIP matrix" not in current_text
@@ -715,6 +739,17 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "networking is not wired into normal add-on use" in readme
     assert ".github/workflows/fast-gate.yml" in readme
     assert ".github/workflows/blender-smoke.yml" in readme
+    readme_fast_gate = """```bash
+uv run python scripts/verify_frozen.py
+uv run python scripts/verify_codex_plugin.py
+uv run python scripts/verify_predicates.py
+uv run ruff check .
+uv run pytest
+```"""
+    development_section = readme.split("## Проверка разработки", maxsplit=1)[1].split(
+        "\n## ", maxsplit=1
+    )[0]
+    assert readme_fast_gate in development_section
     assert "Python 3.13" in readme
     assert "BLENDER_5_2_ALPHA_URL" not in readme
     assert "optional canary" in readme
@@ -822,6 +857,33 @@ def test_runtime_docs_alignment_matches_current_policy():
         text = path.read_text(encoding="utf-8")
         assert "ADR 0002" in text, path
         assert "permanent byte-identical duplicate" not in text, path
+    context_keeper = (
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-context-keeper"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "Root `__init__.py` is the sole runtime" in context_keeper
+    assert "ADR 0002 retired `achievements_v01 (4).py`" in context_keeper
+    assert "Duplicate add-on file exists" not in context_keeper
+    frozen_skill = (
+        ROOT
+        / "plugins"
+        / "achievements-blender-codex"
+        / "skills"
+        / "achievements-frozen-decisions"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    for marker in (
+        "ADR 0005",
+        "non-refreshing 120-second monotonic activity window",
+        "runtime anchors stay out of JSON",
+        "ADR 0006",
+        "cap `1550`",
+    ):
+        assert marker in frozen_skill
     for path in (
         ROOT / "docs" / "agent" / "architecture.md",
         ROOT / "docs" / "agent" / "frozen-application-contract.md",
@@ -858,6 +920,10 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "extension validate" in packaging_release
     assert "extension build" in packaging_release
     assert "extension server-generate" in packaging_release
+    assert (
+        "Run the fast gate: `verify_frozen`, `verify_codex_plugin`, "
+        "`verify_predicates`, `ruff`, and `pytest`."
+    ) in packaging_release
     assert "Whether a Blender extension manifest is introduced" not in packaging_release
 
     verification = (ROOT / "docs" / "agent" / "verification.md").read_text(encoding="utf-8")
@@ -879,3 +945,13 @@ def test_runtime_docs_alignment_matches_current_policy():
     assert "scripts/build_extension.py" in quality_tooling
     assert "Packaging tests freeze LF/CRLF behavior" in quality_tooling
     assert "uv run python scripts/run_blender_smoke.py --suite ui_visual" in quality_tooling
+    assert "uv run python scripts/verify_predicates.py" in quality_tooling
+    assert (
+        "mirrors `verify_frozen`, `verify_codex_plugin`, `verify_predicates`, "
+        "`ruff`, and `pytest` on Python 3.13"
+    ) in quality_tooling
+
+    session_start = (ROOT / ".codex" / "hooks" / "session-start.py").read_text(
+        encoding="utf-8"
+    )
+    assert "uv run python scripts/verify_predicates.py" in session_start

@@ -97,7 +97,7 @@ The add-on code is GPL-3.0-or-later and the full license text ships as `LICENSE`
 
 Before shipping a release package:
 
-- Run the fast gate: `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest`.
+- Run the fast gate: `verify_frozen`, `verify_codex_plugin`, `verify_predicates`, `ruff`, and `pytest`.
 - Run all six Blender smoke suites under temporary `HOME`, `USERPROFILE`, and `BLENDER_USER_RESOURCES` on Blender 5.0.1, 5.1.2, and 5.2.0.
 - Run isolated extension `validate`, `build`, and `server-generate` through
   `--run-blender` on all three targets; require clean `[extension-cli:PASS]`

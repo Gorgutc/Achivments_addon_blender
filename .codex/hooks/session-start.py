@@ -10,7 +10,11 @@ def main() -> int:
     print(f"root={ROOT}")
     print("canonical_addon=__init__.py")
     print("target_runtime=Blender 5.0+")
-    print("fast_checks=uv run python scripts/verify_frozen.py; uv run python scripts/verify_codex_plugin.py")
+    print(
+        "fast_checks=uv run python scripts/verify_frozen.py; "
+        "uv run python scripts/verify_codex_plugin.py; "
+        "uv run python scripts/verify_predicates.py"
+    )
     print("deep_check=uv run python scripts/run_blender_smoke.py --suite register")
     return 0
 

@@ -10,6 +10,7 @@ This document freezes the active behavior of the Achievements Blender add-on. Fu
 - Predicate source of truth: the exact registry under `achievements/predicates/`; root `_check_complex_step` is the Blender-facing adapter.
 - Integrity source of truth: `achievements/integrity.py`; root hash functions remain compatibility wrappers.
 - Extension loader and manifest permission decision: ADR 0004.
+- Active-time accounting decision: ADR 0005.
 - Retired duplicate: `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact Git recovery evidence.
 - Stale reference file: `docs/archive/achievements_100_list.md` preserves an older 100-achievement design byte-for-byte and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
@@ -104,7 +105,11 @@ Persisted stat fields:
 - `time_spent`
 - `renders_completed`
 
-Internal session fields track active time, idle gaps, mesh/material snapshots, daily streaks, and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without current `schema_version` is migrated idempotently and may backfill a missing unlock marker. A current-schema payload never repairs a missing or forged marker. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; scene predicates live in pure `achievements/predicates/` and receive duck-typed Blender state from the root adapter. Do not change persistence shape, path, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
+Active time uses the ADR 0005 non-refreshing 120-second activity window. Only qualifying geometry/material changes, `save_pre`, and `render_complete` open or extend a window. The first real event grants no startup/offline time. Timer, persistence, popup/draw, and flush may only credit the uncounted portion of an existing window and never become activity. Register, load, reset, and monotonic rollback clear runtime anchors without crediting them. Overlapping windows form one continuous interval; disconnected windows discard idle gaps. Runtime anchors use a monotonic clock and are never persisted. The integer `time_spent` total, existing unlock state, and claimed rewards are preserved forward-only.
+
+`daily_sessions` remains an open-day/session tracker updated by the existing flush path; it is independent from active-time seconds and may record a day without adding `time_spent`. Calendar/date checks and speed-model tracking retain their existing wall-clock domain. Changing activity sources, the 120-second timeout, historical progress, or streak semantics requires another explicit owner decision.
+
+Internal session fields also track mesh/material snapshots and speed-modeler windows. Persistence writes are same-directory atomic JSON writes through a temp file, flush/fsync, and `os.replace`. Legacy JSON without current `schema_version` is migrated idempotently and may backfill a missing unlock marker. A current-schema payload never repairs a missing or forged marker. Corrupt JSON is quarantined beside the data file as `achievements_data.json.corrupt*` and a current-schema default file is recreated. Stat threshold evaluation, complex-step aggregation, proof/result DTOs, and progress interfaces live in pure `achievements/engine.py`; scene predicates live in pure `achievements/predicates/` and receive duck-typed Blender state from the root adapter. Do not change persistence shape, path, corrupt-file recovery, active-time semantics, or rule/progress contracts without an explicit migration task.
 
 ## Cloud Sync Stub
 
@@ -117,9 +122,12 @@ Internal session fields track active time, idle gaps, mesh/material snapshots, d
 
 ## XP And Levels
 
+- Pure source of truth: `achievements/levels.py`; root `DIFFICULTY_XP`, `XP_LEVELS`, and `LEVEL_TITLES` remain compatibility aliases for the Blender-facing runtime.
 - Difficulty XP: `easy = 5`, `medium = 10`, `hard = 20`.
-- Level thresholds double from 20 XP for level 1 to 2, through 10 levels.
-- Level 10 is the cap and displays `MAX`.
+- Exact level bands: `20, 40, 80, 120, 140, 170, 200, 230, 260, 290`.
+- Exact level starts: `0, 20, 60, 140, 260, 400, 570, 770, 1000, 1260`; the final level ends at the exact catalog maximum `1550 XP`.
+- Level 10 shows normal progress from `1260` through `1549`; `MAX` appears only at `1550`, which requires all `105/105` achievements.
+- XP and level are derived from the current unlocked catalog IDs and are not persisted. The rebalance requires no schema migration, never lowers a reachable legacy level, and promotes by at most three levels.
 - Level title keys are 1 through 10 and are part of the UI contract.
 
 ## Reward Rules
@@ -215,7 +223,7 @@ Registration registers:
 - `VIEW3D_HT_header` draw callback.
 - Two `SpaceView3D` GPU draw handlers.
 
-Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke. The root entrypoint delegates idempotent class, Scene property, handler, timer, header, and draw-handler wiring to `achievements/lifecycle.py`; stat/complex rule orchestration and proof/progress helpers delegate to `achievements/engine.py`; reward decision planning delegates to `achievements/rewards.py`; activity/session tracking and cached scene snapshot resets delegate to `achievements/events.py`.
+Unregistration must clean all of the above symmetrically and clear preview collections. Repeated register/unregister must be safe in background Blender smoke. The root entrypoint delegates idempotent class, Scene property, handler, timer, header, and draw-handler wiring to `achievements/lifecycle.py`; stat/complex rule orchestration and proof/progress helpers delegate to `achievements/engine.py`; XP/level calculation and formatting delegate to `achievements/levels.py`; reward decision planning delegates to `achievements/rewards.py`; activity/session tracking and cached scene snapshot resets delegate to `achievements/events.py`.
 
 ## Function Map
 
@@ -308,12 +316,12 @@ Before editing add-on behavior:
 
 ## Required Verification Coverage
 
-- `verify_frozen.py` freezes catalog digest/counts/schema keys, UI/runtime constants, top-level function map, class map, registered classes, strict predicate-registry bijection, package-relative runtime imports, absence of runtime `sys.path` mutation, duplicate absence/recovery evidence, archived-list Git blob, tracked-data safety, and this contract.
+- `verify_frozen.py` freezes catalog digest/counts/schema keys, exact XP weights/bands/starts/cap/titles, catalog reachability, root level aliases/delegation, the `0..+3` level-delta bound, UI/runtime constants, top-level function map, class map, registered classes, strict predicate-registry bijection, package-relative runtime imports, absence of runtime `sys.path` mutation, duplicate absence/recovery evidence, archived-list Git blob, tracked-data safety, and this contract.
 - `verify_codex_plugin.py` freezes Codex docs, skills, hooks, agents, and required tracked infra files.
 - Blender `register` smoke freezes registration cleanup.
-- Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, and hot-reload idempotency.
-- Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
+- Blender `lifecycle_stress` smoke freezes repeated register/unregister cleanup, handler counts, timer cleanup, draw handler identity, hot-reload idempotency, and the monotonic 120-second active-time window across timer/progress-persistence/reload/rollback/unregister paths.
+- Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration without stale active-time accrual, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
 - Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers. It also proves factory defaults do not unlock `subsurface_skin` or `denoiser_render`, Subsurface uses only its exact Weight input, and denoiser evaluation is transiently gated to a completed Cycles render for the handler-supplied scene.
 - Release acceptance proves namespace-correct installed import, the exact manifest file permission without network permission, and the installed extension-management route on all supported Blender versions. It performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
 - Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
-- Blender `ui_visual` smoke freezes UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.
+- Blender `ui_visual` smoke freezes the root XP aliases and level boundaries, level-10 progress through `1549`, exact-cap `MAX` at `1550`, UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

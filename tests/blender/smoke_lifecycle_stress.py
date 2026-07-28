@@ -19,6 +19,14 @@ BASE_SCENE_PROPS = [
 ]
 
 
+class FakeClock:
+    def __init__(self, now: float) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
 def fail(message: str) -> None:
     print(f"[smoke_lifecycle_stress:FAIL] {message}")
     raise SystemExit(1)
@@ -133,8 +141,56 @@ def call(label: str, func) -> None:
         fail(f"{label} raised {type(exc).__name__}: {exc}")
 
 
+def assert_active_time_window(module, clock: FakeClock) -> None:
+    if module.stats.time_spent != 0:
+        fail(f"unexpected initial active time: {module.stats.time_spent}")
+
+    clock.now = 160.0
+    call("idle timer", module._timer_tick)
+    if module.stats.time_spent != 0:
+        fail(f"timer opened an activity window: {module.stats.time_spent}")
+
+    clock.now = 200.0
+    call("first real activity", module._on_user_activity)
+    if module.stats.time_spent != 0:
+        fail(f"first activity credited startup time: {module.stats.time_spent}")
+
+    clock.now = 260.0
+    call("first active timer", module._timer_tick)
+    if module.stats.time_spent != 60:
+        fail(f"first timer did not credit exactly once: {module.stats.time_spent}")
+    call("same-time active timer", module._timer_tick)
+    if module.stats.time_spent != 60:
+        fail(f"same-time double flush was not idempotent: {module.stats.time_spent}")
+
+    clock.now = 320.0
+    call("activity cap timer", module._timer_tick)
+    if module.stats.time_spent != 120:
+        fail(f"activity window did not reach 120-second cap: {module.stats.time_spent}")
+    clock.now = 380.0
+    call("post-cap idle timer", module._timer_tick)
+    if module.stats.time_spent != 120:
+        fail(f"timer refreshed the capped activity window: {module.stats.time_spent}")
+
+    clock.now = 90.0
+    call("rollback timer", module._timer_tick)
+    clock.now = 10_000.0
+    call("post-rollback idle timer", module._timer_tick)
+    if module.stats.time_spent != 120:
+        fail(f"rollback or suspend changed active time: {module.stats.time_spent}")
+
+    clock.now = 10_010.0
+    call("post-rollback activity", module._on_user_activity)
+    clock.now = 10_070.0
+    call("post-rollback active timer", module._timer_tick)
+    if module.stats.time_spent != 180:
+        fail(f"new activity did not reopen a clean window: {module.stats.time_spent}")
+
+
 def main() -> None:
     module = load_addon()
+    clock = FakeClock(100.0)
+    module._activity_clock = clock
     data_dir = Path(module.DATA_DIR)
     expected_home = Path(os.environ["USERPROFILE"])
     if expected_home not in data_dir.parents and data_dir != expected_home:
@@ -151,16 +207,29 @@ def main() -> None:
     call("first register", module.register)
     assert_registered_once(module)
     draw_handles = (module._draw_handler, module._draw_handler_pin)
+    assert_active_time_window(module, clock)
 
     call("second register", module.register)
     assert_registered_once(module)
     assert_draw_handlers_unchanged(module, draw_handles)
 
+    clock.now = 20_000.0
+    call("reloaded idle timer", module._timer_tick)
+    if module.stats.time_spent != 180:
+        fail(f"reload credited offline idle: {module.stats.time_spent}")
+    clock.now = 20_010.0
+    call("pre-unregister activity", module._on_user_activity)
+    clock.now = 20_070.0
+
     call("first unregister", module.unregister)
     assert_unregistered(module)
+    if module.stats.time_spent != 240:
+        fail(f"unregister did not credit the tail exactly once: {module.stats.time_spent}")
 
     call("second unregister", module.unregister)
     assert_unregistered(module)
+    if module.stats.time_spent != 240:
+        fail(f"second unregister changed active time: {module.stats.time_spent}")
 
     print("[smoke_lifecycle_stress:PASS] repeated register/unregister lifecycle clean")
 

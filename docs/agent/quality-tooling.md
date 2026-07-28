@@ -18,7 +18,7 @@ Authoritative commands:
 - `uv run pytest`
 
 GitHub Actions:
-- `.github/workflows/fast-gate.yml` mirrors `verify_frozen`, `verify_codex_plugin`, `ruff`, and `pytest` on Python 3.13.
+- `.github/workflows/fast-gate.yml` mirrors `verify_frozen`, `verify_codex_plugin`, `verify_predicates`, `ruff`, and `pytest` on Python 3.13.
 - `.github/workflows/blender-smoke.yml` runs all six Blender smoke suites on fixed blocking targets Blender 5.0.1, 5.1.2, and 5.2.0.
 - The Blender matrix has no repository URL variable, skipped row, canary, or `continue-on-error` target.
 
