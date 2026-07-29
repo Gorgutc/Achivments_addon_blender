@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -54,6 +55,7 @@ REQUIRED_DOCS = [
     "docs/agent/adrs/0004-extension-namespace-and-files-permission.md",
     "docs/agent/adrs/0005-active-time-monotonic-window.md",
     "docs/agent/adrs/0006-xp-level-reachability.md",
+    "docs/agent/adrs/0007-reward-claim-atomicity.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
@@ -174,6 +176,88 @@ def has_frontmatter(path: Path, name: str) -> bool:
     return text.startswith("---\n") and f"name: {name}" in text and "description:" in text
 
 
+def markdown_section(text: str, heading: str) -> str:
+    marker = f"## {heading}\n"
+    if marker not in text:
+        return ""
+    return text.split(marker, maxsplit=1)[1].split("\n## ", maxsplit=1)[0].strip()
+
+
+def current_handoff_atomicity_errors(text: str) -> list[str]:
+    errors: list[str] = []
+    expected_headings = [
+        "Goal",
+        "Changed Files",
+        "Done",
+        "Remaining",
+        "Verification",
+        "Agents And Review",
+        "Blockers",
+        "Residual Risks",
+        "Next Start Prompt",
+    ]
+    actual_headings = re.findall(r"^## (.+)$", text, flags=re.MULTILINE)
+    if actual_headings != expected_headings:
+        errors.append("operational handoff headings must be exact, unique, and ordered")
+    required_markers = (
+        "codex/reward-claim-atomicity",
+        "9cd26bd616c861578bc026a627c1796dddcac655",
+        "ADR 0007",
+        "prospective claim",
+        "idempotent",
+        PREDICATE_COMMAND,
+    )
+    missing = [marker for marker in required_markers if marker not in text]
+    if missing:
+        errors.append(f"missing markers: {', '.join(missing)}")
+
+    blockers = markdown_section(text, "Blockers")
+    expected_blockers = (
+        "None for local implementation and verification. No push, PR, tag, "
+        "GitHub Release, version bump, production asset addition, or real "
+        "`~/BlenderAchievements` access is authorized."
+    )
+    if blockers != expected_blockers:
+        errors.append("Blockers must preserve the exact no-publication/no-real-data boundary")
+
+    next_start = markdown_section(text, "Next Start Prompt")
+    expected_next_start = (
+        "Verify the exact local branch/commit and current `origin/main` before "
+        "continuing. Do not redo reward claim atomicity. Take one separate task "
+        "at a time; the recommended next task is a research-only specification "
+        "for tutorial result verification and a defensible 90% threshold. Keep "
+        "real `~/BlenderAchievements` untouched and do not publish or release "
+        "without explicit owner authorization."
+    )
+    if next_start != expected_next_start:
+        errors.append("Next Start Prompt must preserve the exact continuation boundary")
+
+    authorization_scan = text
+    for allowed_statement in (
+        "No install/ZIP/release gate is authorized for this slice.",
+        (
+            "No push, PR, tag, GitHub Release, version bump, production asset "
+            "addition, or real `~/BlenderAchievements` access is authorized."
+        ),
+        "do not publish or release without explicit owner authorization.",
+        (
+            "- Predicate semantics, deeper fixtures, UI/GPU/handler decomposition, "
+            "production cloud, release versioning, tag, and GitHub Release remain "
+            "separate decisions."
+        ),
+    ):
+        authorization_scan = authorization_scan.replace(allowed_statement, "")
+    if re.search(
+        r"\b(?:push|publish|publication|release|tag)\b",
+        authorization_scan,
+        flags=re.IGNORECASE,
+    ):
+        errors.append("unexpected publication directive or statement detected")
+    if "Active-Time and XP Integration" in text:
+        errors.append("stale integration handoff title remains")
+    return errors
+
+
 def git_tracked_files() -> tuple[bool, set[str], str]:
     result = subprocess.run(
         ["git", "ls-files"],
@@ -277,6 +361,7 @@ def verify_docs() -> None:
         and roadmap_nonempty[1].startswith(
             "> **SUPERSEDED — HISTORICAL PLAN ONLY.**"
         )
+        and "ADRs 0002–0007 for current policy" in roadmap_nonempty[1]
         and "ADR 0002 retired `achievements_v01 (4).py`" in roadmap_nonempty[1],
     )
 
@@ -296,12 +381,15 @@ def verify_docs() -> None:
         frozen_skill.read_text(encoding="utf-8") if frozen_skill.is_file() else ""
     )
     record(
-        "frozen decisions skill includes both correctness ADRs",
+        "frozen decisions skill includes current correctness ADRs",
         "ADR 0005" in frozen_skill_text
         and "non-refreshing 120-second monotonic activity window" in frozen_skill_text
         and "runtime anchors stay out of JSON" in frozen_skill_text
         and "ADR 0006" in frozen_skill_text
-        and "cap `1550`" in frozen_skill_text,
+        and "cap `1550`" in frozen_skill_text
+        and "ADR 0007" in frozen_skill_text
+        and "prospective claim" in frozen_skill_text
+        and "idempotent marked-witness recovery" in frozen_skill_text,
     )
 
     readme = ROOT / "README.md"
@@ -361,13 +449,11 @@ def verify_docs() -> None:
         if current_handoff.is_file()
         else ""
     )
+    handoff_errors = current_handoff_atomicity_errors(current_text)
     record(
-        "current handoff tracks integrated correctness work",
-        "codex/active-time-level-integration" in current_text
-        and "787857d1ca6ef32be5fa81b708ef9b1e833f226e" in current_text
-        and "966ba6abc016454680d22179d93319686b8bbd6d" in current_text
-        and PREDICATE_COMMAND in current_text
-        and "Draft PR #15" not in current_text,
+        "current handoff tracks reward claim atomicity",
+        not handoff_errors,
+        "; ".join(handoff_errors),
     )
 
 

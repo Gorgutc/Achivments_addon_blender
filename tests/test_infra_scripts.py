@@ -44,6 +44,8 @@ def test_smoke_runner_tolerates_windows_acl_cleanup_after_process_result():
 
     assert "shutil.rmtree(temp_home, ignore_errors=True)" in text
     assert "[smoke-runner:WARN] temporary profile cleanup incomplete" in text
+    assert 'encoding="utf-8"' in text
+    assert 'errors="replace"' in text
 
 
 def test_smoke_runner_requires_exact_pass_marker_and_rejects_tracebacks():
@@ -102,6 +104,94 @@ def test_verify_frozen_passes_current_addon_contract():
     assert "catalog XP state space is fully reachable" in result.stdout
     assert "level rebalance never lowers existing reachable progress" in result.stdout
     assert "level ten progresses until exact MAX cap" in result.stdout
+    assert "reward action, prospective claim, and retry contract frozen" in result.stdout
+
+
+def test_reward_atomicity_guard_rejects_contract_mutants():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_frozen
+
+    addon_source = (ROOT / "__init__.py").read_text(encoding="utf-8")
+    rewards_source = (ROOT / "achievements" / "rewards.py").read_text(
+        encoding="utf-8"
+    )
+    smoke_source = (ROOT / "tests" / "blender" / "smoke_rewards.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert verify_frozen.reward_atomicity_errors(
+        addon_source,
+        rewards_source,
+        smoke_source,
+    ) == []
+
+    old_field = "claim_after_apply: bool = False"
+    assert old_field in rewards_source
+    planner_mutant = rewards_source.replace(
+        old_field,
+        "mark_claimed: bool = False",
+        1,
+    )
+    assert verify_frozen.reward_atomicity_errors(
+        addon_source,
+        planner_mutant,
+        smoke_source,
+    )
+
+    property_declaration = "    @property\n    def mark_claimed"
+    assert property_declaration in rewards_source
+    method_mutant = rewards_source.replace(
+        property_declaration,
+        "    def mark_claimed",
+        1,
+    )
+    assert verify_frozen.reward_atomicity_errors(
+        addon_source,
+        method_mutant,
+        smoke_source,
+    )
+
+    alias_return = "        return self.claim_after_apply"
+    assert alias_return in rewards_source
+    alias_mutant = rewards_source.replace(alias_return, "        return True", 1)
+    assert verify_frozen.reward_atomicity_errors(
+        addon_source,
+        alias_mutant,
+        smoke_source,
+    )
+
+    index_restore = "            owner.active_material_index = active_material_index"
+    assert index_restore in addon_source
+    index_mutant = addon_source.replace(index_restore, "            pass", 1)
+    assert verify_frozen.reward_atomicity_errors(
+        index_mutant,
+        rewards_source,
+        smoke_source,
+    )
+
+    prospective_save = "and not save_data(reward_claim=self.ach_id)"
+    assert prospective_save in addon_source
+    preclaim_mutant = addon_source.replace(
+        prospective_save,
+        "and save_data(reward_claim=self.ach_id)",
+        1,
+    )
+    assert verify_frozen.reward_atomicity_errors(
+        preclaim_mutant,
+        rewards_source,
+        smoke_source,
+    )
+
+    retry_call = "        exercise_save_failure_retry("
+    assert smoke_source.count(retry_call) == 6
+    smoke_mutant = smoke_source.replace(retry_call, "        disabled_retry(", 1)
+    assert verify_frozen.reward_atomicity_errors(
+        addon_source,
+        rewards_source,
+        smoke_mutant,
+    )
 
 
 def test_archived_catalog_blob_check_is_stable_for_windows_crlf(tmp_path):
@@ -154,17 +244,73 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "docs/agent/adrs/0004-extension-namespace-and-files-permission.md" in result.stdout
     assert "docs/agent/adrs/0005-active-time-monotonic-window.md" in result.stdout
     assert "docs/agent/adrs/0006-xp-level-reachability.md" in result.stdout
+    assert "docs/agent/adrs/0007-reward-claim-atomicity.md" in result.stdout
     assert "workflow exists: .github/workflows/fast-gate.yml" in result.stdout
     assert "workflow exists: .github/workflows/blender-smoke.yml" in result.stdout
     assert "historical roadmap is explicitly superseded" in result.stdout
     assert "context keeper records the sole runtime and retired duplicate" in result.stdout
-    assert "frozen decisions skill includes both correctness ADRs" in result.stdout
+    assert "frozen decisions skill includes current correctness ADRs" in result.stdout
     assert "README fast gate includes predicate verifier" in result.stdout
     assert "CI fast gate includes active predicate verifier step" in result.stdout
     assert "quality tooling CI mirror includes predicate verifier" in result.stdout
     assert "session-start pointer includes predicate verifier" in result.stdout
     assert "release guidance includes predicate verifier" in result.stdout
-    assert "current handoff tracks integrated correctness work" in result.stdout
+    assert "current handoff tracks reward claim atomicity" in result.stdout
+
+
+def test_current_handoff_guard_rejects_publish_authorization_mutant():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_codex_plugin
+
+    handoff = (ROOT / "docs" / "handoff" / "current.md").read_text(encoding="utf-8")
+    assert verify_codex_plugin.current_handoff_atomicity_errors(handoff) == []
+
+    prohibition = (
+        "No push, PR, tag, GitHub Release, version bump, production asset "
+        "addition, or real `~/BlenderAchievements` access is authorized."
+    )
+    authorization = (
+        "Push, PR, tag, GitHub Release, version bump, production asset addition, "
+        "and real `~/BlenderAchievements` access are authorized."
+    )
+    assert prohibition in handoff
+    mutant = handoff.replace(prohibition, authorization, 1)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(mutant)
+
+    duplicate_blockers = handoff + (
+        "\n## Blockers\n\nPush, PR, tag, and GitHub Release are authorized.\n"
+    )
+    duplicate_next = handoff + (
+        "\n## Next Start Prompt\n\nPublish and release this branch now.\n"
+    )
+    contradictory_done = handoff.replace(
+        "## Remaining",
+        "Push, PR, tag, and GitHub Release are authorized.\n\n## Remaining",
+        1,
+    )
+    imperative_done = handoff.replace(
+        "## Remaining",
+        "Publish this branch.\n\n## Remaining",
+        1,
+    )
+    create_release_done = handoff.replace(
+        "## Remaining",
+        "Create a tag and GitHub Release.\n\n## Remaining",
+        1,
+    )
+    modal_push_done = handoff.replace(
+        "## Remaining",
+        "You may push this branch.\n\n## Remaining",
+        1,
+    )
+    assert verify_codex_plugin.current_handoff_atomicity_errors(duplicate_blockers)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(duplicate_next)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(contradictory_done)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(imperative_done)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(create_release_done)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(modal_push_done)
 
 
 def test_find_blender_reports_a_usable_executable(tmp_path):
@@ -448,6 +594,7 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     plan_nonempty = [line for line in plan_text.splitlines() if line.strip()]
     assert plan_nonempty[0] == "# Achievements Iterative Roadmap Implementation Plan"
     assert plan_nonempty[1].startswith("> **SUPERSEDED — HISTORICAL PLAN ONLY.**")
+    assert "ADRs 0002–0007 for current policy" in plan_nonempty[1]
     assert "ADR 0002 retired `achievements_v01 (4).py`" in plan_nonempty[1]
     for phrase in (
         "## Sources",
@@ -529,30 +676,27 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
     ):
         assert f"## {heading}" in current_text
     for phrase in (
-        "Achievements — Active-Time and XP Integration",
-        "`codex/active-time-level-integration`",
-        "`main@64076a6f7e6dde494ac9435627bdcebe2e7f9a46`",
-        "PR #15 is already merged",
-        "787857d1ca6ef32be5fa81b708ef9b1e833f226e",
-        "966ba6abc016454680d22179d93319686b8bbd6d",
-        "ADR 0005",
-        "ADR 0006",
-        "non-refreshing 120-second monotonic window",
-        "exact `1550 XP` cap",
-        "Root compatibility aliases and wrappers remain",
+        "Reward Claim Atomicity",
+        "`codex/reward-claim-atomicity`",
+        "`origin/main@9cd26bd616c861578bc026a627c1796dddcac655`",
+        "PR #16 is already merged",
+        "ADR 0007",
+        "prospective claim",
+        "idempotent",
+        "schema `1.0.0`",
         "sole runtime",
-        "SUPERSEDED — HISTORICAL PLAN ONLY",
         "uv run python scripts/verify_predicates.py",
-        "Blender 5.0.1/5.1.2/5.2.0",
-        "`SCHEMA_VERSION = \"1.0.0\"`",
+        "Blender 5.1.2",
+        "Blender 5.2.0",
         "219 licensed PNG files",
         "11 approved tutorial URLs",
         "20 licensed reward `.blend` files",
-        "does not authorize either",
+        "No push, PR, tag, GitHub Release",
     ):
         assert phrase in current_text
     assert "BLENDER_5_2_ALPHA_URL" not in current_text
     assert "Draft PR #15" not in current_text
+    assert "Active-Time and XP Integration" not in current_text
     assert "`codex/extension-policy-022`" not in current_text
     assert "Canonical member SHA-256 map" not in current_text
     assert "Continue after Iteration 12 merge" not in current_text

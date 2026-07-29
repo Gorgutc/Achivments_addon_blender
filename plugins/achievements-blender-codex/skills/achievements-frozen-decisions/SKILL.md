@@ -30,6 +30,11 @@ Frozen by the owner-approved 2026-07-28 correctness decisions:
 - ADR 0005 freezes a non-refreshing 120-second monotonic activity window opened only by real Blender activity sources. Timer, persistence, register/load, popup/draw, and flush remain passive; runtime anchors stay out of JSON, schema `1.0.0` stays unchanged, and `daily_sessions` remains a separate open-day tracker.
 - ADR 0006 freezes XP awards `5/10/20`, bands `20/40/80/120/140/170/200/230/260/290`, starts `0/20/60/140/260/400/570/770/1000/1260`, cap `1550`, level-10 progress through `1549`, `MAX` only at `105/105`, derived/no-migration XP, and pure `achievements/levels.py` behind root aliases.
 
+Frozen by the 2026-07-29 reward-correctness decision:
+- ADR 0007 freezes confirmed Blender action before a prospective claim, atomic JSON write before runtime claim mutation, and idempotent marked-witness recovery after save failure.
+- Failed/no-op application stays claim-free and rolls back new Blender ID deltas and partial slot/modifier state. Geo-node application preserves Blender-supported non-mesh targets and requires a real `NODES` modifier with the assigned GeometryNodeTree.
+- Already-persisted rewards retain explicit reapply. Schema `1.0.0`, version `0.2.2`, catalog/assets, and files-only permissions stay unchanged; recovery markers are not authentication.
+
 Before future add-on behavior edits, read `docs/agent/frozen-application-contract.md` and identify the exact frozen surface affected.
 
 If a task conflicts with these decisions, notify the user before proceeding.

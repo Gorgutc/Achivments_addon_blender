@@ -1,76 +1,67 @@
-# Achievements — Active-Time and XP Integration
+# Achievements — Reward Claim Atomicity
 
 ## Goal
 
-Integrate the owner-approved active-time correctness commit `787857d1ca6ef32be5fa81b708ef9b1e833f226e` and XP level-reachability commit `966ba6abc016454680d22179d93319686b8bbd6d` from their shared exact base `main@64076a6f7e6dde494ac9435627bdcebe2e7f9a46`. Close the related instruction drift without expanding product behavior.
-
-PR #15 is already merged in `main@64076a6`; it is not a draft or an active continuation target. The delivery branch is `codex/active-time-level-integration`. Resolve its actual local and remote SHA with Git rather than treating this moving handoff as a commit-identity source.
+Make asset reward claims truthful and retryable: confirm the Blender-side action first, persist a prospective claim atomically second, and mutate the runtime claim set only after the write succeeds. The work is isolated on `codex/reward-claim-atomicity` from exact `origin/main@9cd26bd616c861578bc026a627c1796dddcac655`; PR #16 is already merged in that base and is not a continuation target.
 
 ## Changed Files
 
-- Runtime and pure behavior: `__init__.py`, `achievements/events.py`, and new `achievements/levels.py`.
-- Behavior regressions: `tests/test_events.py`, new `tests/test_levels.py`, and Blender smoke updates in `smoke_lifecycle_stress.py`, `smoke_persistence.py`, and `smoke_ui_visual.py`.
-- Frozen decisions and architecture: ADR 0005, ADR 0006, `architecture.md`, `frozen-application-contract.md`, `frozen-decisions.md`, `verification.md`, and the frozen-decisions skill.
-- Fail-closed verification: `scripts/verify_frozen.py`, `scripts/verify_codex_plugin.py`, and `tests/test_infra_scripts.py`.
-- P1 instruction/CI repair: `README.md`, `.github/workflows/fast-gate.yml`, `.codex/hooks/session-start.py`, `quality-tooling.md`, `packaging-release.md`, the context-keeper skill, the historical roadmap banner, and this handoff.
+- Runtime/pure logic: sole runtime `__init__.py`, `achievements/rewards.py`, and `achievements/persistence.py`.
+- Regression coverage: `tests/test_rewards.py`, `tests/test_persistence.py`, `tests/blender/smoke_rewards.py`, `tests/test_infra_scripts.py`, `scripts/run_blender_smoke.py`, `scripts/verify_frozen.py`, and `scripts/verify_codex_plugin.py`.
+- Decision/instruction surfaces: ADR 0007, architecture, frozen decisions, frozen application contract, verification guide, frozen-decisions skill, the superseded roadmap's live policy pointer, and this handoff.
 
 ## Done
 
-- Active time uses the ADR 0005 non-refreshing 120-second monotonic window. Only qualifying Blender events open or extend a window; timer, persistence, popup/draw, register/load, and flush do not manufacture activity.
-- Runtime activity anchors remain absent from JSON. Existing `time_spent`, `daily_sessions`, unlocks, integrity markers, rewards, persistence path, and `SCHEMA_VERSION = "1.0.0"` remain compatible.
-- XP awards stay `5/10/20`; ADR 0006 freezes the ten reachable level bands and exact `1550 XP` cap. Level 10 progresses through `1549`, and only `105/105` displays `MAX`.
-- Root compatibility aliases and wrappers remain while pure `achievements/levels.py` owns XP aggregation, level calculation, and display formatting.
-- The retired duplicate stays absent. Context guidance now names `__init__.py` as the sole runtime and points to ADR 0002 recovery evidence.
-- The old iterative roadmap is explicitly `SUPERSEDED — HISTORICAL PLAN ONLY`; its body remains historical evidence rather than current instructions.
-- `scripts/verify_predicates.py` is now an explicit local and GitHub Actions fast-gate step, mirrored by active quality/release guidance and guarded by the Codex verifier and infra tests.
+- `material`, `mesh`, and `geo_nodes` now use `claim_after_apply`; the read-only `RewardResult.mark_claimed` compatibility alias is preserved, and tutorial/`none` behavior is unchanged.
+- Each asset action returns a confirmed postcondition. Missing expected datablocks, incompatible targets, wrong subtypes, false postconditions, and Blender exceptions return `CANCELLED` without persistence or a claim.
+- The first claim is a prospective claim: `payload_from_stats(..., reward_claim=id)` leaves runtime state unchanged, the existing same-directory atomic JSON write runs, and only a successful write adds the in-memory claim.
+- Save failure after confirmed action returns `FINISHED` with a retry warning. Material/Object/GeometryNodeTree markers let the next unclaimed attempt recover the existing witness and retry persistence idempotently without duplicating Blender state.
+- Invalid and partial actions restore material data/object links, empty slots, and active indices for all objects sharing a mesh, remove partial modifiers, and remove the complete newly loaded/created Blender ID delta, including nested dependencies and Library IDs. Geo-node actions preserve Blender-supported non-mesh targets and require an actual `NODES` modifier with the assigned GeometryNodeTree.
+- Already-persisted rewards retain explicit reapply and skip redundant claim persistence.
+- ADR 0007 freezes this behavior. Recovery markers are idempotency metadata, not authentication. Version `0.2.2`, schema `1.0.0`, exact JSON keys, 105 achievements, 9 lessons, XP policy, catalog/assets, files-only permission, and disabled production networking are unchanged.
 
 ## Remaining
 
-- Owner-input content epics remain separate: 219 licensed PNG files, 11 approved tutorial URLs, and 20 licensed reward `.blend` files with expected-datablock and claimed-only-after-apply acceptance.
-- Predicate semantics, deeper Blender fixtures, further UI/GPU/handler decomposition, and a production cloud backend remain separate specifications.
-- A tag or GitHub Release requires a later explicit release-policy decision. This integration does not authorize either.
+- Research a separate tutorial-proof design: compare the learner's Blender result with an approved lesson result and award only after a defensible threshold such as 90%; define normalized scene features, weights, tolerances, anti-gaming rules, explainable differences, and author-owned reference fixtures before implementation.
+- Research anti-piracy/licensing separately; local unlock hashes and reward markers are not authentication. Any account or entitlement system requires an explicit privacy/network/revocation/offline-grace specification.
+- Design an owner-only authoring UI separately for achievement cards, text, illustrations, tutorials, and reward assets, with validation and an export/review workflow rather than hidden production secrets in the add-on.
+- Owner-input content epics remain: 219 licensed PNG files, 11 approved tutorial URLs, and 20 licensed reward `.blend` files.
+- Predicate semantics, deeper fixtures, UI/GPU/handler decomposition, production cloud, release versioning, tag, and GitHub Release remain separate decisions.
 
 ## Verification
 
-The combined branch must pass, as one result:
+Required fast gate:
 
 1. `uv run python scripts/verify_frozen.py`
 2. `uv run python scripts/verify_codex_plugin.py`
 3. `uv run python scripts/verify_predicates.py`
 4. `uv run ruff check .`
 5. `uv run pytest`
-6. All six Blender source smoke suites in disposable profiles.
-7. Committed-revision installed lifecycle/policy and the blocking Blender 5.0.1/5.1.2/5.2.0 matrix.
-8. Requirements, code/dead-code, component/instruction-drift, verification, and lookahead review.
 
-Individual source-branch results do not substitute for this combined gate. Never run Blender smoke against real `~/BlenderAchievements` data, and never overwrite the immutable 0.2.1/0.2.2 canonical ZIP evidence.
+Current-tree evidence: `verify_frozen.py` **59/59 PASS**; `verify_codex_plugin.py` **120/120 PASS**; predicate registry **65 IDs / 85 catalog pairs PASS**; Ruff PASS; pytest **482 passed**. All six source smoke suites pass on local Blender 5.1.2 with disposable profiles. The expanded reward suite also passes on Blender 5.2.0 LTS and covers six linked/fallback save-failure retries, exact runtime/JSON state, nested dependency cleanup, exact shared-mesh/object-linked material-slot and active-index rollback, supported CURVE targets, incompatible LIGHT denial, partial-action rollback, and persisted reapply. `git diff --check` passes.
 
-Combined-tree evidence recorded on 2026-07-28:
-
-- `verify_frozen.py`: **58/58 PASS**; `verify_codex_plugin.py`: **119/119 PASS**; predicate registry: **65 IDs / 85 catalog pairs PASS**.
-- Ruff: PASS; pytest: **478 passed**.
-- All six source smoke suites passed on each blocking target Blender 5.0.1, 5.1.2, and 5.2.0: **18/18 PASS**, using disposable profiles.
-- Independent conflict/component/dead-code and instruction-drift/verification reviews found two Important documentation guards, both fixed and re-reviewed at **0 Critical / 0 Important / 0 Low**.
-
-Committed integration-tree installed lifecycle/policy passed on Blender 5.0.1, 5.1.2, and 5.2.0: install, namespace/`sys.path`/warning/permission checks, explicit unregister/register, Blender-owned removal, post-remove state, and disposable progress preservation all passed. Per-run ZIP hashes are verification artifacts rather than byte-reproducible commit identities. The exact final commit and remote state belong in the paired session closeout; this file intentionally does not self-reference its containing SHA.
+No local Blender 5.0 executable is installed; the existing GitHub matrix is historical base evidence, not a run of this unpublished branch. No install/ZIP/release gate is authorized for this slice.
 
 ## Agents And Review
 
-- A persistent requirements guardian held the owner-approved behavior, no-real-data, one-commit, push-only, and no-release boundaries.
-- Independent conflict/component/dead-code and instruction-drift/verification/lookahead reviewers inspected the combined tree in waves.
-- Review fixed the missing ADR 0005 frozen-skill contract and weak P1 false-green checks, then confirmed **0 Critical / 0 Important / 0 Low**.
-- If the `/review` command is unavailable, the final reviewer performs the explicit requirements/diff/checks/blockers/residual-risks fallback.
+- A persistent component guardian holds the task contract, frozen invariants, no-real-data boundary, and session record.
+- Independent reward test and Blender API reviewers have confirmed the expanded current-tree behavior with 0 Critical / 0 Important / 0 Low after nested-ID, rollback, and cross-version geo fixes.
+- Explorer, code, dead-code, instruction-drift, verification, and lookahead reviews completed in waves. They found and closed exact shared-owner active-index rollback, compatibility-guard, handoff-guard, and live ADR-pointer gaps; final re-review is 0 Critical / 0 Important / 0 Low.
+- The explicit `/review` fallback covered requirements, diff, checks, blockers, and residual risks because no callable slash command was available.
 
 ## Blockers
 
-None for the scoped P0/P1 integration. PR creation, tag creation, and GitHub Release creation are intentionally outside this handoff.
+None for local implementation and verification. No push, PR, tag, GitHub Release, version bump, production asset addition, or real `~/BlenderAchievements` access is authorized.
 
 ## Residual Risks
 
-- Future catalog or difficulty changes must recompute the XP cap, reachability, and no-downlevel bounds.
-- Future activity sources must preserve the non-refreshing monotonic-window contract and keep flush paths passive.
-- Real content, disputed predicate semantics, deeper Blender fixtures, root-runtime decomposition, and production cloud remain unfinished product work.
+- Witness recovery is scene/session local. A process crash can recover only when the marked `.blend` state survives; there is no cross-process reward journal.
+- Concurrent Blender processes still share one JSON file and can overwrite each other last-writer-wins; multi-process coordination is a separate persistence task.
+- Blender Undo does not reverse the external JSON claim; the claim proves a successful application event, while explicit reapply restores a removed scene result.
+- `bpy.data.user_map()` delta cleanup assumes synchronous operator execution so unrelated IDs are not created inside the same action window.
+- Production reward assets still require license approval and exact expected-datablock validation.
+- Blender 5.0 behavior will rely on the blocking CI matrix when this branch is eventually published; it is not locally installed in this session.
 
 ## Next Start Prompt
 
-Verify the exact remote state of `codex/active-time-level-integration` or its eventual `main` merge before continuing. Do not redo P0/P1. Select one owner-input epic from the canonical backlog, keep real `~/BlenderAchievements` untouched, and do not create a tag or GitHub Release without a separate owner decision.
+Verify the exact local branch/commit and current `origin/main` before continuing. Do not redo reward claim atomicity. Take one separate task at a time; the recommended next task is a research-only specification for tutorial result verification and a defensible 90% threshold. Keep real `~/BlenderAchievements` untouched and do not publish or release without explicit owner authorization.

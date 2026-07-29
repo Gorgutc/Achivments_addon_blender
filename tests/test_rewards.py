@@ -170,9 +170,11 @@ def test_reward_manager_plans_access_checks_and_non_claim_rewards(tmp_path):
     assert bad_hash.report == ("ERROR", "Unlock verification failed")
     assert tutorial.status == "finished"
     assert tutorial.action == rewards.RewardAction("open_tutorial", url="https://example.com/tutorial")
+    assert not tutorial.claim_after_apply
     assert not tutorial.mark_claimed
     assert none_reward.status == "finished"
     assert none_reward.action == rewards.RewardAction("none")
+    assert not none_reward.claim_after_apply
     assert not none_reward.mark_claimed
 
 
@@ -200,6 +202,7 @@ def test_reward_manager_plans_asset_link_or_fallback_with_cached_existence(tmp_p
     geo = manager.resolve("geo_reward", stats, verifier)
 
     assert material.status == "finished"
+    assert material.claim_after_apply
     assert material.mark_claimed
     assert material.action.kind == "placeholder_material"
     assert material.action.asset_path == tmp_path / "rewards" / "test_mat.blend"
@@ -211,8 +214,29 @@ def test_reward_manager_plans_asset_link_or_fallback_with_cached_existence(tmp_p
     assert mesh_again.action == mesh.action
 
     assert geo.action.kind == "placeholder_geo_nodes"
+    assert geo.claim_after_apply
     assert geo.mark_claimed
     assert calls.count(tmp_path / "rewards" / "test_mesh.blend") == 1
+
+
+def test_reward_manager_keeps_a_persisted_claim_as_non_mutating_reapply_intent(tmp_path):
+    from achievements import rewards
+
+    manifest = rewards.RewardManifest.from_achievements(sample_achievements())
+    manager = rewards.RewardManager(manifest, data_dir=tmp_path)
+    stats = make_stats(
+        unlocked={"material_reward"},
+        unlock_hashes={"material_reward": "ok"},
+        rewards_claimed={"material_reward"},
+    )
+    verifier = rewards.RewardVerifier(lambda _ach_id, stored_hash: stored_hash == "ok")
+
+    result = manager.resolve("material_reward", stats, verifier)
+
+    assert result.status == "finished"
+    assert result.action.kind == "placeholder_material"
+    assert result.claim_after_apply
+    assert stats.rewards_claimed == {"material_reward"}
 
 
 def test_asset_cache_rechecks_missing_assets_so_late_files_can_link(tmp_path):

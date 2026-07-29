@@ -72,6 +72,7 @@ Static verifier rules:
 - Validate local integrity helpers and legacy-only missing-hash backfill without changing `SCHEMA_VERSION`.
 - Validate that real user progress files are not tracked.
 - Validate that sync helpers are present as tracked infra and covered by normal unit tests.
+- Validate the ADR 0007 action-before-save contract: type-specific postconditions, prospective claim payload, atomic write before runtime mutation, fail-closed dispatch, and six linked/fallback save-retry scenarios.
 
 Level unit rules:
 - Cover every level start and end boundary, including `1260` as level-10 progress, `1549` as `289/290`, and exact `1550` as the only `MAX` tuple.
@@ -86,7 +87,9 @@ Blender smoke rules:
 - Verify persistence schema, current `schema_version`, atomic save, legacy hash migration, current-schema missing/forged hash denial, and corrupt JSON quarantine/recovery under a temporary profile.
 - Verify factory defaults do not unlock `subsurface_skin` or `denoiser_render`, only exact active Subsurface Weight matches, and denoiser unlock requires the supplied completed Cycles-render scene.
 - Verify engine complex checks do not emit `[Achievements] complex step check error` markers for compositor and render-pass checks.
-- Verify material, mesh, and geo node reward fallbacks plus reward claim persistence under a temporary profile.
+- Verify linked and fallback material, mesh, and geo-node action postconditions plus prospective reward claim persistence under a temporary profile.
+- Force two save failures for each linked/fallback reward type, then prove a successful retry reuses the same marked witness, does not duplicate Blender state, and restores exact sorted runtime/JSON claims.
+- Deny missing/wrong datablocks and incompatible targets without persistence; compare the complete Blender ID set after nested dependency rejection and forced partial-application rollback, including material slots and active indices for objects sharing a mesh.
 - Verify root XP aliases, level-10 progress through `1549`, exact-cap `MAX` at `1550`, UI visual contract geometry, tab state, popup/card contract artifact generation, notification stacking, and pinned-overlay no-overlap under a temporary profile.
 - For a release candidate, run extension validate/build/server-generate plus ZIP install/enable, namespace-correct import, native extension-management routing, register/unregister, and external Blender-owned removal on Blender 5.0.1, 5.1.2, and 5.2.0. Removal must preserve a sentinel `~/BlenderAchievements/` tree in the disposable profile.
 

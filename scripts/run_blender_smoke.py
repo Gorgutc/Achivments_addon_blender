@@ -73,6 +73,8 @@ def main() -> int:
             cwd=ROOT,
             env=smoke_env(temp_home),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,

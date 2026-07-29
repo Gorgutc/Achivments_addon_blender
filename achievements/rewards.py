@@ -42,7 +42,12 @@ class RewardResult:
     status: str
     action: RewardAction
     report: tuple[str, str] | None = None
-    mark_claimed: bool = False
+    claim_after_apply: bool = False
+
+    @property
+    def mark_claimed(self) -> bool:
+        """Compatibility alias; claims are committed only after confirmed apply."""
+        return self.claim_after_apply
 
 
 @dataclass(frozen=True)
@@ -196,7 +201,7 @@ class RewardManager:
                 asset_path=asset_path,
             ),
             report=("INFO", f"Reward: {spec.description}"),
-            mark_claimed=True,
+            claim_after_apply=True,
         )
 
 

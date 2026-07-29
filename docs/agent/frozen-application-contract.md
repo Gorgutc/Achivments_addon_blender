@@ -11,6 +11,7 @@ This document freezes the active behavior of the Achievements Blender add-on. Fu
 - Integrity source of truth: `achievements/integrity.py`; root hash functions remain compatibility wrappers.
 - Extension loader and manifest permission decision: ADR 0004.
 - Active-time accounting decision: ADR 0005.
+- Reward claim atomicity decision: ADR 0007.
 - Retired duplicate: `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact Git recovery evidence.
 - Stale reference file: `docs/archive/achievements_100_list.md` preserves an older 100-achievement design byte-for-byte and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
@@ -143,7 +144,12 @@ Internal session fields also track mesh/material snapshots and speed-modeler win
 - Mesh rewards link loaded objects into the active collection.
 - Geo node rewards create a `NODES` modifier on the active object.
 - Reward manifest, verifier, asset-existence cache, importer/action planning, and manager decisions live in pure `achievements/rewards.py`; Blender asset linking and placeholder creation remain runtime adapter behavior in the root operator.
+- `RewardResult.mark_claimed` remains a read-only compatibility alias; `claim_after_apply` is the explicit internal timing signal.
 - Bundled reward `.blend` assets remain release-blocked until asset licenses are explicitly approved; missing-asset fallback behavior is the intentional default before that decision.
+- ADR 0007 requires a confirmed type-specific Blender postcondition before the first asset claim: assigned Material on an active mesh, linked MESH Object, or GeometryNodeTree assigned to a real `NODES` modifier on the active Blender-supported object. Supported non-mesh geometry targets remain valid.
+- The first prospective reward claim is built without runtime mutation: JSON is written atomically before `stats.rewards_claimed` mutates. Failed/no-op application never saves; failed JSON persistence leaves the runtime claim absent and a marked Blender witness recoverable by an idempotent retry.
+- Recovery uses `_achievements_reward_id`, `_achievements_reward_type`, and `_achievements_reward_name` on Material, Object, or GeometryNodeTree IDs. These markers are scene-local idempotency metadata, not authentication and not JSON schema fields.
+- Invalid/partial application removes the complete new Blender ID delta and partial modifiers, and restores material data/object links, empty slots, and every shared owner's active slot index. An already-persisted reward keeps explicit reapply behavior without redundant claim persistence.
 
 ## UI Design Freeze
 
@@ -323,5 +329,5 @@ Before editing add-on behavior:
 - Blender `persistence` smoke freezes temp-home JSON schema, save/load, legacy unlock-hash migration without stale active-time accrual, current-schema missing/forged marker preservation, current `schema_version`, atomic current-schema save, and corrupt JSON quarantine/recovery.
 - Blender `engine` smoke freezes compositor/render-pass complex checks so they do not emit `[Achievements] complex step check error` markers. It also proves factory defaults do not unlock `subsurface_skin` or `denoiser_render`, Subsurface uses only its exact Weight input, and denoiser evaluation is transiently gated to a completed Cycles render for the handler-supplied scene.
 - Release acceptance proves namespace-correct installed import, the exact manifest file permission without network permission, and the installed extension-management route on all supported Blender versions. It performs Blender-owned removal in a separate process while preserving disposable-profile progress sentinels.
-- Blender `rewards` smoke freezes material, mesh, and geo node fallback behavior plus reward claim persistence.
+- Blender `rewards` smoke freezes linked/fallback material, mesh, and geo-node postconditions; prospective claims; six idempotent save-failure retries; nested ID cleanup; exact material-slot/active-index and partial-application rollback; exact JSON/runtime claims; and persisted reapply.
 - Blender `ui_visual` smoke freezes the root XP aliases and level boundaries, level-10 progress through `1549`, exact-cap `MAX` at `1550`, UI geometry planning, tab state acceptance, non-overlap overlay stacking, and a generated visual contract artifact for header/popup/cards/notifications/pinned overlay.

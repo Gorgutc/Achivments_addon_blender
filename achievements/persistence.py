@@ -160,14 +160,17 @@ def state_from_payload(raw: Any, *, make_unlock_hash) -> tuple[PersistenceState,
     return state, PersistenceReport(migrated=migrated)
 
 
-def payload_from_stats(stats: Any) -> dict[str, Any]:
+def payload_from_stats(stats: Any, *, reward_claim: str | None = None) -> dict[str, Any]:
     payload = default_payload()
     payload["stats"] = {field: _as_int(getattr(stats, field, 0)) for field in STAT_FIELDS}
     payload["unlocked"] = sorted(str(item) for item in getattr(stats, "unlocked", set()))
     payload["unlock_hashes"] = dict(getattr(stats, "unlock_hashes", {}))
-    payload["rewards_claimed"] = sorted(
+    rewards_claimed = {
         str(item) for item in getattr(stats, "rewards_claimed", set())
-    )
+    }
+    if reward_claim is not None:
+        rewards_claimed.add(str(reward_claim))
+    payload["rewards_claimed"] = sorted(rewards_claimed)
     payload["pinned_ach_id"] = getattr(stats, "pinned_ach_id", "") or ""
     payload["daily_sessions"] = list(getattr(stats, "daily_sessions", []))
     return payload
