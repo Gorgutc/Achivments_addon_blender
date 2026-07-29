@@ -2,13 +2,14 @@
 
 ## Goal
 
-Make asset reward claims truthful and retryable: confirm the Blender-side action first, persist a prospective claim atomically second, and mutate the runtime claim set only after the write succeeds. The work is isolated on `codex/reward-claim-atomicity` from exact `origin/main@9cd26bd616c861578bc026a627c1796dddcac655`; PR #16 is already merged in that base and is not a continuation target.
+Make asset reward claims truthful and retryable: confirm the Blender-side action first, persist a prospective claim atomically second, and mutate the runtime claim set only after the write succeeds. PR #17 delivered exact branch head `213babb6e29e023617a66600e4b9d8375ea466d9` from `codex/reward-claim-atomicity`, based on `origin/main@9cd26bd616c861578bc026a627c1796dddcac655`, and merged it into `main` as `396dda957908b26c94d73387bcddf14712a4c23c`. This living handoff is refreshed by a scoped docs/guard follow-up whose containing merge must be resolved from Git history rather than self-referenced.
 
 ## Changed Files
 
 - Runtime/pure logic: sole runtime `__init__.py`, `achievements/rewards.py`, and `achievements/persistence.py`.
 - Regression coverage: `tests/test_rewards.py`, `tests/test_persistence.py`, `tests/blender/smoke_rewards.py`, `tests/test_infra_scripts.py`, `scripts/run_blender_smoke.py`, `scripts/verify_frozen.py`, and `scripts/verify_codex_plugin.py`.
 - Decision/instruction surfaces: ADR 0007, architecture, frozen decisions, frozen application contract, verification guide, frozen-decisions skill, the superseded roadmap's live policy pointer, and this handoff.
+- Post-merge closeout: only this handoff, its fail-closed verifier, and focused mutant coverage change after PR #17.
 
 ## Done
 
@@ -19,6 +20,7 @@ Make asset reward claims truthful and retryable: confirm the Blender-side action
 - Invalid and partial actions restore material data/object links, empty slots, and active indices for all objects sharing a mesh, remove partial modifiers, and remove the complete newly loaded/created Blender ID delta, including nested dependencies and Library IDs. Geo-node actions preserve Blender-supported non-mesh targets and require an actual `NODES` modifier with the assigned GeometryNodeTree.
 - Already-persisted rewards retain explicit reapply and skip redundant claim persistence.
 - ADR 0007 freezes this behavior. Recovery markers are idempotency metadata, not authentication. Version `0.2.2`, schema `1.0.0`, exact JSON keys, 105 achievements, 9 lessons, XP policy, catalog/assets, files-only permission, and disabled production networking are unchanged.
+- PR #17 merged exact head `213babb6e29e023617a66600e4b9d8375ea466d9` as `396dda957908b26c94d73387bcddf14712a4c23c` after the Fast Gate and all Blender 5.0.1 / 5.1.2 / 5.2.0 source-smoke jobs succeeded.
 
 ## Remaining
 
@@ -40,18 +42,19 @@ Required fast gate:
 
 Current-tree evidence: `verify_frozen.py` **59/59 PASS**; `verify_codex_plugin.py` **120/120 PASS**; predicate registry **65 IDs / 85 catalog pairs PASS**; Ruff PASS; pytest **482 passed**. All six source smoke suites pass on local Blender 5.1.2 with disposable profiles. The expanded reward suite also passes on Blender 5.2.0 LTS and covers six linked/fallback save-failure retries, exact runtime/JSON state, nested dependency cleanup, exact shared-mesh/object-linked material-slot and active-index rollback, supported CURVE targets, incompatible LIGHT denial, partial-action rollback, and persisted reapply. `git diff --check` passes.
 
-No local Blender 5.0 executable is installed; the existing GitHub matrix is historical base evidence, not a run of this unpublished branch. No install/ZIP/release gate is authorized for this slice.
+PR #17 ran the exact reviewed head through GitHub Fast Gate and the blocking Blender 5.0.1, 5.1.2, and 5.2.0 source-smoke matrix; all checks completed successfully before merge. CI created and removed disposable per-job ZIP/install state; no canonical, retained, or published extension artifact was produced. The local machine still has no Blender 5.0 executable.
 
 ## Agents And Review
 
 - A persistent component guardian holds the task contract, frozen invariants, no-real-data boundary, and session record.
 - Independent reward test and Blender API reviewers have confirmed the expanded current-tree behavior with 0 Critical / 0 Important / 0 Low after nested-ID, rollback, and cross-version geo fixes.
 - Explorer, code, dead-code, instruction-drift, verification, and lookahead reviews completed in waves. They found and closed exact shared-owner active-index rollback, compatibility-guard, handoff-guard, and live ADR-pointer gaps; final re-review is 0 Critical / 0 Important / 0 Low.
+- Delivery verification independently checked the exact PR #17 base/head, four successful blocking jobs, merge method, and resulting `main` SHA before this closeout.
 - The explicit `/review` fallback covered requirements, diff, checks, blockers, and residual risks because no callable slash command was available.
 
 ## Blockers
 
-None for local implementation and verification. No push, PR, tag, GitHub Release, version bump, production asset addition, or real `~/BlenderAchievements` access is authorized.
+None for the merged source slice. PR #17 merged exact head `213babb6e29e023617a66600e4b9d8375ea466d9` into `main` as `396dda957908b26c94d73387bcddf14712a4c23c` after Fast Gate and Blender 5.0.1 / 5.1.2 / 5.2.0 succeeded. CI created and removed disposable per-job ZIP/install state; no tag, GitHub Release, version bump, production asset addition, canonical/retained/published extension artifact, or real `~/BlenderAchievements` access was performed.
 
 ## Residual Risks
 
@@ -60,8 +63,8 @@ None for local implementation and verification. No push, PR, tag, GitHub Release
 - Blender Undo does not reverse the external JSON claim; the claim proves a successful application event, while explicit reapply restores a removed scene result.
 - `bpy.data.user_map()` delta cleanup assumes synchronous operator execution so unrelated IDs are not created inside the same action window.
 - Production reward assets still require license approval and exact expected-datablock validation.
-- Blender 5.0 behavior will rely on the blocking CI matrix when this branch is eventually published; it is not locally installed in this session.
+- Blender 5.0.1 behavior passed the blocking PR #17 matrix; Blender 5.0 is still unavailable locally, and future changes must retain that CI row.
 
 ## Next Start Prompt
 
-Verify the exact local branch/commit and current `origin/main` before continuing. Do not redo reward claim atomicity. Take one separate task at a time; the recommended next task is a research-only specification for tutorial result verification and a defensible 90% threshold. Keep real `~/BlenderAchievements` untouched and do not publish or release without explicit owner authorization.
+Verify current `main` contains PR #17 head `213babb6e29e023617a66600e4b9d8375ea466d9`, merge `396dda957908b26c94d73387bcddf14712a4c23c`, and this containing handoff closeout before continuing. Do not redo reward claim atomicity. Take one separate task at a time; the recommended next task is a research-only specification for tutorial result verification and a defensible 90% threshold. Keep real `~/BlenderAchievements` untouched; any tag, GitHub Release, version bump, production asset publication, or cloud/auth change requires separate owner authorization.
