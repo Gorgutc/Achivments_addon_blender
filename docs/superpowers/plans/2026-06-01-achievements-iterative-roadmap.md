@@ -1,6 +1,6 @@
 # Achievements Iterative Roadmap Implementation Plan
 
-> **SUPERSEDED — HISTORICAL PLAN ONLY.** This roadmap records the pre-0.2.0 implementation sequence and is not an active instruction source. Use `AGENTS.md`, `docs/agent/*`, `docs/handoff/current.md`, and ADRs 0002–0006 for current policy. ADR 0002 retired `achievements_v01 (4).py`; do not restore it from obsolete statements below.
+> **SUPERSEDED — HISTORICAL PLAN ONLY.** This roadmap records the pre-0.2.0 implementation sequence and is not an active instruction source. Use `AGENTS.md`, `docs/agent/*`, `docs/handoff/current.md`, and ADRs 0002–0007 for current policy. ADR 0002 retired `achievements_v01 (4).py`; do not restore it from obsolete statements below.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` for implementation tasks with scoped review agents, or `superpowers:executing-plans` when subagents are unavailable. Steps use checkbox (`- [ ]`) syntax for tracking.
 

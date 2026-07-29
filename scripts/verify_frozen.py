@@ -94,6 +94,9 @@ FROZEN_CONSTANTS = {
     "PIN_MARGIN_X": 20,
     "PIN_MARGIN_Y": 20,
     "_IDLE_TIMEOUT": 120,
+    "_REWARD_MARKER_ID": "_achievements_reward_id",
+    "_REWARD_MARKER_TYPE": "_achievements_reward_type",
+    "_REWARD_MARKER_NAME": "_achievements_reward_name",
     "_UNIT": 20.0,
     "_CARD_W": 15.6,
     "_CARD_H": 5.0,
@@ -373,6 +376,271 @@ def class_method(
     )
 
 
+def reward_atomicity_errors(
+    addon_source: str,
+    rewards_source: str,
+    smoke_source: str,
+) -> list[str]:
+    """Validate the action -> prospective save -> runtime claim contract structurally."""
+    errors: list[str] = []
+    addon_module = ast.parse(addon_source)
+    rewards_module = ast.parse(rewards_source)
+    smoke_module = ast.parse(smoke_source)
+
+    reward_result = next(
+        (
+            node
+            for node in rewards_module.body
+            if isinstance(node, ast.ClassDef) and node.name == "RewardResult"
+        ),
+        None,
+    )
+    result_fields = (
+        {
+            node.target.id
+            for node in reward_result.body
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+        }
+        if reward_result is not None
+        else set()
+    )
+    compatibility_alias = class_method(rewards_module, "RewardResult", "mark_claimed")
+    alias_returns = (
+        [node for node in compatibility_alias.body if isinstance(node, ast.Return)]
+        if compatibility_alias is not None
+        else []
+    )
+    alias_is_exact_property = (
+        compatibility_alias is not None
+        and len(compatibility_alias.decorator_list) == 1
+        and attribute_path(compatibility_alias.decorator_list[0]) == "property"
+        and len(alias_returns) == 1
+        and isinstance(alias_returns[0].value, ast.Attribute)
+        and isinstance(alias_returns[0].value.value, ast.Name)
+        and alias_returns[0].value.value.id == "self"
+        and alias_returns[0].value.attr == "claim_after_apply"
+    )
+    if (
+        "claim_after_apply" not in result_fields
+        or "mark_claimed" in result_fields
+        or not alias_is_exact_property
+    ):
+        errors.append(
+            "RewardResult must expose claim_after_apply with a mark_claimed property alias"
+        )
+
+    save_function = top_level_function(addon_module, "save_data")
+    if save_function is None:
+        errors.append("save_data is missing")
+    else:
+        kwonly_names = {argument.arg for argument in save_function.args.kwonlyargs}
+        if "reward_claim" not in kwonly_names:
+            errors.append("save_data must accept keyword-only reward_claim")
+        calls = [
+            (node.lineno, attribute_path(node.func), node)
+            for node in ast.walk(save_function)
+            if isinstance(node, ast.Call)
+        ]
+        payload_calls = [item for item in calls if item[1] == "ach_persistence.payload_from_stats"]
+        write_calls = [item for item in calls if item[1] == "ach_persistence.atomic_write_json"]
+        runtime_claim_calls = [item for item in calls if item[1] == "stats.rewards_claimed.add"]
+        if len(payload_calls) != 1 or not any(
+            keyword.arg == "reward_claim"
+            and isinstance(keyword.value, ast.Name)
+            and keyword.value.id == "reward_claim"
+            for keyword in payload_calls[0][2].keywords
+        ):
+            errors.append("save_data must build one prospective reward_claim payload")
+        if (
+            len(payload_calls) != 1
+            or len(write_calls) != 1
+            or len(runtime_claim_calls) != 1
+            or not (
+                payload_calls[0][0] < write_calls[0][0] < runtime_claim_calls[0][0]
+            )
+        ):
+            errors.append("save_data order must be payload -> atomic write -> runtime claim")
+        boolean_returns = {
+            node.value.value
+            for node in ast.walk(save_function)
+            if isinstance(node, ast.Return)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, bool)
+        }
+        if boolean_returns != {False, True}:
+            errors.append("save_data must report exact False/True outcomes")
+
+    execute = class_method(addon_module, "ACH_OT_ApplyReward", "execute")
+    apply_action = class_method(addon_module, "ACH_OT_ApplyReward", "_apply_action")
+    if execute is None or apply_action is None:
+        errors.append("reward operator execute/apply adapter is missing")
+    else:
+        execute_calls = [
+            (node.lineno, attribute_path(node.func), node)
+            for node in ast.walk(execute)
+            if isinstance(node, ast.Call)
+        ]
+        apply_calls = [item for item in execute_calls if item[1] == "self._apply_action"]
+        save_calls = [item for item in execute_calls if item[1] == "save_data"]
+        direct_claims = [item for item in execute_calls if item[1] == "stats.rewards_claimed.add"]
+        if (
+            len(apply_calls) != 1
+            or len(save_calls) != 1
+            or apply_calls[0][0] >= save_calls[0][0]
+            or direct_claims
+        ):
+            errors.append("operator must confirm apply before save and never mutate claim directly")
+
+        no_op_guard = any(
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.UnaryOp)
+            and isinstance(node.test.op, ast.Not)
+            and isinstance(node.test.operand, ast.Name)
+            and node.test.operand.id == "applied"
+            and any(
+                isinstance(child, ast.Return)
+                and isinstance(child.value, ast.Set)
+                and any(
+                    isinstance(item, ast.Constant) and item.value == "CANCELLED"
+                    for item in child.value.elts
+                )
+                for child in node.body
+            )
+            for node in ast.walk(execute)
+        )
+        if not no_op_guard:
+            errors.append("operator must cancel an unconfirmed action before persistence")
+
+        prospective_guard = any(
+            isinstance(node, ast.If)
+            and any(
+                isinstance(child, ast.Call)
+                and attribute_path(child.func) == "save_data"
+                and any(keyword.arg == "reward_claim" for keyword in child.keywords)
+                and any(
+                    isinstance(parent, ast.UnaryOp)
+                    and isinstance(parent.op, ast.Not)
+                    and parent.operand is child
+                    for parent in ast.walk(node.test)
+                )
+                for child in ast.walk(node.test)
+            )
+            and {"already_claimed"}.issubset(
+                {child.id for child in ast.walk(node.test) if isinstance(child, ast.Name)}
+            )
+            and {"claim_after_apply"}.issubset(
+                {child.attr for child in ast.walk(node.test) if isinstance(child, ast.Attribute)}
+            )
+            for node in ast.walk(execute)
+        )
+        if not prospective_guard:
+            errors.append("operator must gate prospective claim save after apply")
+
+        action_kinds = {
+            node.value
+            for node in ast.walk(apply_action)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        required_actions = {
+            "link_asset",
+            "placeholder_material",
+            "placeholder_mesh",
+            "placeholder_geo_nodes",
+        }
+        final_return = apply_action.body[-1] if apply_action.body else None
+        if not required_actions.issubset(action_kinds) or not (
+            isinstance(final_return, ast.Return)
+            and isinstance(final_return.value, ast.Constant)
+            and final_return.value.value is False
+        ):
+            errors.append("reward action dispatch must cover all asset kinds and fail closed")
+
+    snapshot_method = class_method(addon_module, "ACH_OT_ApplyReward", "_data_id_snapshot")
+    cleanup_method = class_method(addon_module, "ACH_OT_ApplyReward", "_remove_new_data_ids")
+    snapshot_calls = (
+        {
+            attribute_path(node.func)
+            for node in ast.walk(snapshot_method)
+            if isinstance(node, ast.Call)
+        }
+        if snapshot_method is not None
+        else set()
+    )
+    cleanup_calls = (
+        {
+            attribute_path(node.func)
+            for node in ast.walk(cleanup_method)
+            if isinstance(node, ast.Call)
+        }
+        if cleanup_method is not None
+        else set()
+    )
+    if "bpy.data.user_map" not in snapshot_calls or not {
+        "bpy.data.user_map",
+        "bpy.data.batch_remove",
+    }.issubset(cleanup_calls):
+        errors.append("reward rollback must remove the complete new Blender ID delta")
+
+    capture_material = class_method(
+        addon_module, "ACH_OT_ApplyReward", "_capture_material_state"
+    )
+    restore_material = class_method(
+        addon_module, "ACH_OT_ApplyReward", "_restore_material_state"
+    )
+    captures_active_material_index = capture_material is not None and any(
+        isinstance(node, ast.Attribute) and node.attr == "active_material_index"
+        for node in ast.walk(capture_material)
+    )
+    restores_active_material_index = restore_material is not None and any(
+        isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Attribute)
+            and target.attr == "active_material_index"
+            for target in node.targets
+        )
+        for node in ast.walk(restore_material)
+    )
+    smoke_active_material_indices = sum(
+        1
+        for node in ast.walk(smoke_module)
+        if isinstance(node, ast.Attribute) and node.attr == "active_material_index"
+    )
+    if (
+        not captures_active_material_index
+        or not restores_active_material_index
+        or smoke_active_material_indices < 3
+    ):
+        errors.append("material rollback must restore and smoke active material indices")
+
+    retry_calls = sum(
+        1
+        for node in ast.walk(smoke_module)
+        if isinstance(node, ast.Call) and attribute_path(node.func) == "exercise_save_failure_retry"
+    )
+    required_smoke_markers = {
+        "forced reward claim write failure",
+        "wrong-type mesh library left a loaded object behind",
+        "wrong-type geo library left a loaded node group behind",
+        "runtime reward claims are not exact",
+        "incompatible linked geo denial changed Blender IDs",
+        "incompatible fallback geo denial changed Blender IDs",
+        "compatible curve geo reward was not applied",
+        "failed material application left new Blender IDs",
+        "failed material application did not restore linked material slots",
+        "failed mesh application left new Blender IDs",
+        "failed geo application left new Blender IDs",
+        "linked/fallback action proof, no-op denial, prospective claims, and idempotent save retry clean",
+    }
+    smoke_literals = "\n".join(
+        node.value
+        for node in ast.walk(smoke_module)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+    if retry_calls < 6 or not all(marker in smoke_literals for marker in required_smoke_markers):
+        errors.append("reward smoke must cover six linked/fallback retries and exact failure invariants")
+    return errors
+
+
 def assignment_dict(module: ast.Module) -> dict[str, Any]:
     names = ["bl_info"]
     values = {name: literal_assignment(module, name) for name in names}
@@ -606,6 +874,16 @@ def verify_addon_contract() -> None:
             for path in call_paths
         )
         and "bpy.ops.preferences.addon_remove" not in call_paths,
+    )
+    atomicity_errors = reward_atomicity_errors(
+        ADDON.read_text(encoding="utf-8"),
+        (ROOT / "achievements" / "rewards.py").read_text(encoding="utf-8"),
+        (ROOT / "tests" / "blender" / "smoke_rewards.py").read_text(encoding="utf-8"),
+    )
+    record(
+        "reward action, prospective claim, and retry contract frozen",
+        not atomicity_errors,
+        "; ".join(atomicity_errors),
     )
 
     achievement_ids = [item.get("id") for item in achievements]
@@ -896,6 +1174,9 @@ def verify_repo_contract() -> None:
             "`achievements/levels.py`",
             "`20, 40, 80, 120, 140, 170, 200, 230, 260, 290`",
             "`MAX` appears only at `1550`",
+            "ADR 0007",
+            "prospective reward claim",
+            "_achievements_reward_id",
         ]
         missing = [marker for marker in required_markers if marker not in text]
         record("frozen application contract covers design and functions", not missing, ", ".join(missing))

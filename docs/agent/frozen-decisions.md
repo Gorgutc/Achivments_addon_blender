@@ -30,6 +30,13 @@ Frozen after the owner-approved XP reachability decision in ADR 0006:
 - Keep difficulty awards `5/10/20`, exact bands `20/40/80/120/140/170/200/230/260/290`, starts `0/20/60/140/260/400/570/770/1000/1260`, and cap `1550`; level 10 progresses through `1549`, and only `105/105` at `1550` displays `MAX`.
 - Keep XP derived from unlocked catalog IDs with no persistence migration, preserve the no-downlevel and maximum `+3` promotion bounds, and keep pure progression in `achievements/levels.py` behind root compatibility aliases.
 
+Frozen after the 2026-07-29 reward claim atomicity decision in ADR 0007:
+- Asset reward claims are committed only after a confirmed Blender action and a successful atomic JSON write. Failed/no-op actions remain claim-free and do not save.
+- Preserve the read-only `RewardResult.mark_claimed` compatibility alias while `claim_after_apply` names the internal timing contract.
+- Build the first claim prospectively without mutating runtime state; after a save failure, recover the marked Material, MESH Object, or GeometryNodeTree witness and retry persistence without duplication.
+- Roll back newly loaded/created Blender ID deltas, partial modifiers, failed material-slot changes, and shared owners' active slot indices when application is not confirmed. Preserve Blender-supported non-mesh geo-node targets and require an actual `NODES` modifier plus assigned GeometryNodeTree rather than assuming success.
+- Preserve already-claimed explicit reapply, JSON schema `1.0.0`, the exact payload keys, version `0.2.2`, reward catalog/assets, and files-only extension policy. Recovery markers are idempotency metadata, not authentication.
+
 Default future-change rule:
 - Change only the named behavior, function, data field, or UI surface requested by the user.
 - Preserve unrelated catalog entries, category IDs, stat keys, reward semantics, UI layout, persistence schema, and lifecycle cleanup.

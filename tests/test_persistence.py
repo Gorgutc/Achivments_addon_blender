@@ -144,6 +144,19 @@ def test_payload_round_trip_from_stats_uses_current_schema():
     assert restored.daily_sessions == ["2026-06-06"]
 
 
+def test_prospective_reward_claim_payload_does_not_mutate_runtime_stats():
+    from achievements import persistence as ach_persistence
+
+    stats = make_stats(rewards_claimed={"existing_reward"})
+
+    payload = ach_persistence.payload_from_stats(stats, reward_claim="new_reward")
+
+    assert payload["rewards_claimed"] == ["existing_reward", "new_reward"]
+    assert stats.rewards_claimed == {"existing_reward"}
+    assert set(payload) == set(ach_persistence.default_payload())
+    assert payload["schema_version"] == "1.0.0"
+
+
 def test_current_schema_missing_or_forged_hash_is_not_backfilled():
     from achievements import persistence as ach_persistence
 

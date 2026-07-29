@@ -120,6 +120,9 @@ from .achievements import ui as ach_ui
 
 _REWARD_MANIFEST = ach_rewards.RewardManifest.from_achievements(ACHIEVEMENTS_DEF)
 _REWARD_ASSET_CACHE = ach_rewards.AssetCache()
+_REWARD_MARKER_ID = "_achievements_reward_id"
+_REWARD_MARKER_TYPE = "_achievements_reward_type"
+_REWARD_MARKER_NAME = "_achievements_reward_name"
 
 # =============================================
 #  XP & LEVEL SYSTEM
@@ -215,14 +218,19 @@ def _ensure_data_dirs():
     ach_persistence.ensure_data_dirs(DATA_DIR)
 
 
-def save_data():
-    """Persist all stats, unlocks, and rewards to JSON file."""
-    _flush_session_time()
+def save_data(*, reward_claim=None):
+    """Persist stats, committing an optional reward claim only after a successful write."""
     try:
+        _flush_session_time()
         _ensure_data_dirs()
-        ach_persistence.atomic_write_json(DATA_FILE, ach_persistence.payload_from_stats(stats))
+        payload = ach_persistence.payload_from_stats(stats, reward_claim=reward_claim)
+        ach_persistence.atomic_write_json(DATA_FILE, payload)
     except Exception as e:
         print(f"[Achievements] Save error: {e}")
+        return False
+    if reward_claim is not None:
+        stats.rewards_claimed.add(str(reward_claim))
+    return True
 
 
 def load_data():
@@ -772,72 +780,429 @@ class ACH_OT_ApplyReward(bpy.types.Operator):
             return {'FINISHED'}
 
         obj = context.active_object
-        if action.kind == "link_asset" and action.asset_path is not None:
-            self._link(context, action.reward_type, str(action.asset_path), action.name, obj)
-        elif action.kind == "placeholder_material":
-            self._ph_mat(action.name, obj)
-        elif action.kind == "placeholder_mesh":
-            self._ph_mesh(context, action.name)
-        elif action.kind == "placeholder_geo_nodes":
-            self._ph_geo(action.name, obj)
+        already_claimed = self.ach_id in stats.rewards_claimed
+        recover_existing = result.claim_after_apply and not already_claimed
+        try:
+            applied = self._apply_action(context, action, obj, recover_existing)
+        except Exception as error:
+            self.report({'ERROR'}, f"Reward application failed: {error}")
+            return {'CANCELLED'}
+        if not applied:
+            self.report({'WARNING'}, "Reward could not be applied")
+            return {'CANCELLED'}
 
-        if result.mark_claimed:
-            stats.rewards_claimed.add(self.ach_id)
-            save_data()
+        if (
+            result.claim_after_apply
+            and not already_claimed
+            and not save_data(reward_claim=self.ach_id)
+        ):
+            self.report(
+                {'WARNING'},
+                "Reward applied, but the claim was not saved. Retry to finish.",
+            )
+            return {'FINISHED'}
         if result.report:
             level, message = result.report
             self.report({level}, message)
         return {'FINISHED'}
 
-    def _link(self, ctx, rtype, bp, name, obj):
+    def _apply_action(self, context, action, obj, recover_existing):
+        if action.kind == "link_asset" and action.asset_path is not None:
+            return self._link(
+                context,
+                action.reward_type,
+                str(action.asset_path),
+                action.name,
+                obj,
+                recover_existing,
+            )
+        if action.kind == "placeholder_material":
+            return self._ph_mat(action.name, obj, recover_existing)
+        if action.kind == "placeholder_mesh":
+            return self._ph_mesh(context, action.name, recover_existing)
+        if action.kind == "placeholder_geo_nodes":
+            return self._ph_geo(action.name, obj, recover_existing)
+        return False
+
+    def _marker_matches(self, datablock, reward_type, name):
+        if datablock is None:
+            return False
+        try:
+            return (
+                datablock.get(_REWARD_MARKER_ID) == self.ach_id
+                and datablock.get(_REWARD_MARKER_TYPE) == reward_type
+                and datablock.get(_REWARD_MARKER_NAME) == name
+            )
+        except (AttributeError, TypeError):
+            return False
+
+    def _mark_reward(self, datablock, reward_type, name):
+        datablock[_REWARD_MARKER_ID] = self.ach_id
+        datablock[_REWARD_MARKER_TYPE] = reward_type
+        datablock[_REWARD_MARKER_NAME] = name
+
+    def _data_id_snapshot(self):
+        return {datablock.as_pointer() for datablock in bpy.data.user_map()}
+
+    def _remove_new_data_ids(self, before):
+        loaded = [
+            datablock
+            for datablock in bpy.data.user_map()
+            if datablock.as_pointer() not in before
+        ]
+        if loaded:
+            bpy.data.batch_remove(ids=loaded)
+
+    def _capture_material_state(self, obj):
+        mesh = obj.data
+        owners = tuple(
+            (
+                candidate,
+                candidate.active_material_index,
+                tuple((slot.link, slot.material) for slot in candidate.material_slots),
+            )
+            for candidate in bpy.data.objects
+            if candidate.type == 'MESH' and candidate.data == mesh
+        )
+        return mesh, tuple(mesh.materials), owners
+
+    def _restore_material_state(self, state):
+        mesh, materials, owners = state
+        mesh.materials.clear()
+        for material in materials:
+            mesh.materials.append(material)
+        for owner, active_material_index, slots in owners:
+            if owner.data != mesh:
+                continue
+            for index, (link, material) in enumerate(slots):
+                if index >= len(owner.material_slots):
+                    break
+                slot = owner.material_slots[index]
+                slot.link = link
+                if link == 'OBJECT':
+                    slot.material = material
+            owner.active_material_index = active_material_index
+
+    def _apply_material_transaction(self, material, obj, before_load=None):
+        if material is None or obj is None or obj.type != 'MESH':
+            return False
+        previous_state = self._capture_material_state(obj)
+        try:
+            applied = self._apply_material(material, obj)
+        except Exception:
+            try:
+                self._restore_material_state(previous_state)
+            finally:
+                if before_load is not None:
+                    self._remove_new_data_ids(before_load)
+            raise
+        if not applied:
+            try:
+                self._restore_material_state(previous_state)
+            finally:
+                if before_load is not None:
+                    self._remove_new_data_ids(before_load)
+        return applied
+
+    def _find_marked_material(self, name):
+        return next(
+            (
+                material
+                for material in bpy.data.materials
+                if self._marker_matches(material, "material", name)
+            ),
+            None,
+        )
+
+    def _find_material_witness(self, name):
+        for candidate in bpy.data.objects:
+            if candidate.type != 'MESH' or not candidate.users_collection:
+                continue
+            for material in candidate.data.materials:
+                if self._marker_matches(material, "material", name):
+                    return material
+        return None
+
+    def _apply_material(self, material, obj):
+        if material is None or obj is None or obj.type != 'MESH':
+            return False
+        obj.data.materials.clear()
+        obj.data.materials.append(material)
+        return any(slot == material for slot in obj.data.materials)
+
+    def _find_marked_object(self, name):
+        return next(
+            (
+                candidate
+                for candidate in bpy.data.objects
+                if candidate.type == 'MESH'
+                and self._marker_matches(candidate, "mesh", name)
+            ),
+            None,
+        )
+
+    def _ensure_object_linked(self, ctx, obj):
+        if obj is None:
+            return False
+        if not obj.users_collection:
+            collection = getattr(ctx, "collection", None) or ctx.scene.collection
+            collection.objects.link(obj)
+        return bool(obj.users_collection)
+
+    def _find_marked_modifier(self, name):
+        for candidate in bpy.data.objects:
+            if not candidate.users_collection:
+                continue
+            for modifier in candidate.modifiers:
+                if modifier.type != 'NODES':
+                    continue
+                node_group = getattr(modifier, "node_group", None)
+                if self._is_geometry_node_group(node_group) and self._marker_matches(
+                    node_group, "geo_nodes", name
+                ):
+                    return modifier
+        return None
+
+    def _is_geometry_node_group(self, node_group):
+        return getattr(node_group, "bl_idname", "") == "GeometryNodeTree"
+
+    def _find_marked_node_group(self, name):
+        return next(
+            (
+                group
+                for group in bpy.data.node_groups
+                if self._is_geometry_node_group(group)
+                and self._marker_matches(group, "geo_nodes", name)
+            ),
+            None,
+        )
+
+    def _link(self, ctx, rtype, bp, name, obj, recover_existing):
         """Load reward asset from .blend file."""
         if rtype == "material":
-            with bpy.data.libraries.load(bp, link=False) as (df, dt):
-                if name in df.materials:
-                    dt.materials = [name]
-            if dt.materials and dt.materials[0] and obj and obj.type == 'MESH':
-                # Overwrite all material slots (clear + append)
-                obj.data.materials.clear()
-                obj.data.materials.append(dt.materials[0])
+            if recover_existing and self._find_material_witness(name) is not None:
+                return True
+            if obj is None or obj.type != 'MESH':
+                return False
+            material = self._find_marked_material(name) if recover_existing else None
+            if material is not None:
+                return self._apply_material_transaction(material, obj)
+            before_load = self._data_id_snapshot()
+            try:
+                with bpy.data.libraries.load(bp, link=False) as (df, dt):
+                    if name in df.materials:
+                        dt.materials = [name]
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+            material = next((item for item in dt.materials if item is not None), None)
+            if material is None:
+                self._remove_new_data_ids(before_load)
+                return False
+            try:
+                self._mark_reward(material, "material", name)
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+            return self._apply_material_transaction(material, obj, before_load)
         elif rtype == "mesh":
-            with bpy.data.libraries.load(bp, link=False) as (df, dt):
-                if name in df.objects:
-                    dt.objects = [name]
-            for o in dt.objects:
-                if o:
-                    ctx.collection.objects.link(o)
+            if recover_existing:
+                existing = self._find_marked_object(name)
+                if existing is not None:
+                    return self._ensure_object_linked(ctx, existing)
+            before_load = self._data_id_snapshot()
+            try:
+                with bpy.data.libraries.load(bp, link=False) as (df, dt):
+                    if name in df.objects:
+                        dt.objects = [name]
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+            linked_object = next((item for item in dt.objects if item is not None), None)
+            if linked_object is None:
+                self._remove_new_data_ids(before_load)
+                return False
+            if linked_object.type != 'MESH':
+                self._remove_new_data_ids(before_load)
+                return False
+            try:
+                self._mark_reward(linked_object, "mesh", name)
+                applied = self._ensure_object_linked(ctx, linked_object)
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+            if not applied:
+                self._remove_new_data_ids(before_load)
+            return applied
         elif rtype == "geo_nodes":
-            with bpy.data.libraries.load(bp, link=False) as (df, dt):
-                if name in df.node_groups:
-                    dt.node_groups = [name]
-            if obj and dt.node_groups and dt.node_groups[0]:
-                mod = obj.modifiers.new(name=name, type='NODES')
-                mod.node_group = dt.node_groups[0]
+            modifier = None
+            if recover_existing:
+                modifier = self._find_marked_modifier(name)
+                if modifier is not None:
+                    return True
+            target = obj
+            if target is None:
+                return False
+            node_group = self._find_marked_node_group(name) if recover_existing else None
+            before_load = None
+            if node_group is None:
+                before_load = self._data_id_snapshot()
+                try:
+                    with bpy.data.libraries.load(bp, link=False) as (df, dt):
+                        if name in df.node_groups:
+                            dt.node_groups = [name]
+                except Exception:
+                    self._remove_new_data_ids(before_load)
+                    raise
+                node_group = next((item for item in dt.node_groups if item is not None), None)
+                if not self._is_geometry_node_group(node_group):
+                    self._remove_new_data_ids(before_load)
+                    return False
+                try:
+                    self._mark_reward(node_group, "geo_nodes", name)
+                except Exception:
+                    self._remove_new_data_ids(before_load)
+                    raise
+            created_modifier = False
+            try:
+                if modifier is None:
+                    modifier = target.modifiers.new(name=name, type='NODES')
+                    created_modifier = modifier is not None
+                if modifier is None:
+                    applied = False
+                else:
+                    modifier.node_group = node_group
+                    applied = (
+                        modifier.node_group == node_group
+                        and self._marker_matches(node_group, "geo_nodes", name)
+                    )
+            except Exception:
+                if created_modifier:
+                    target.modifiers.remove(modifier)
+                if before_load is not None:
+                    self._remove_new_data_ids(before_load)
+                raise
+            if not applied:
+                if created_modifier:
+                    target.modifiers.remove(modifier)
+                if before_load is not None:
+                    self._remove_new_data_ids(before_load)
+            return applied
+        return False
 
-    def _ph_mat(self, name, obj):
+    def _ph_mat(self, name, obj, recover_existing):
         """Create placeholder material when .blend file is missing."""
-        h = int(hashlib.md5(name.encode()).hexdigest()[:6], 16)
-        r, g, b = ((h >> 16) & 0xFF) / 255, ((h >> 8) & 0xFF) / 255, (h & 0xFF) / 255
-        mat = bpy.data.materials.new(name=name)
-        mat.use_nodes = True
-        bsdf = mat.node_tree.nodes.get("Principled BSDF")
-        if bsdf:
-            bsdf.inputs["Base Color"].default_value = (r, g, b, 1)
-            bsdf.inputs["Metallic"].default_value = 0.5
-            bsdf.inputs["Roughness"].default_value = 0.3
-        if obj and obj.type == 'MESH':
-            obj.data.materials.clear()
-            obj.data.materials.append(mat)
+        if recover_existing and self._find_material_witness(name) is not None:
+            return True
+        if obj is None or obj.type != 'MESH':
+            return False
+        material = self._find_marked_material(name) if recover_existing else None
+        if material is None:
+            before_load = self._data_id_snapshot()
+            try:
+                h = int(hashlib.md5(name.encode()).hexdigest()[:6], 16)
+                r, g, b = (
+                    ((h >> 16) & 0xFF) / 255,
+                    ((h >> 8) & 0xFF) / 255,
+                    (h & 0xFF) / 255,
+                )
+                material = bpy.data.materials.new(name=name)
+                material.use_nodes = True
+                bsdf = material.node_tree.nodes.get("Principled BSDF")
+                if bsdf:
+                    bsdf.inputs["Base Color"].default_value = (r, g, b, 1)
+                    bsdf.inputs["Metallic"].default_value = 0.5
+                    bsdf.inputs["Roughness"].default_value = 0.3
+                self._mark_reward(material, "material", name)
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+            return self._apply_material_transaction(material, obj, before_load)
+        return self._apply_material_transaction(material, obj)
 
-    def _ph_mesh(self, ctx, name):
+    def _ph_mesh(self, ctx, name, recover_existing):
         """Create placeholder mesh when .blend file is missing."""
-        bpy.ops.mesh.primitive_ico_sphere_add(radius=0.5)
-        ctx.active_object.name = name
+        if recover_existing:
+            existing = self._find_marked_object(name)
+            if existing is not None:
+                return self._ensure_object_linked(ctx, existing)
+        before_load = self._data_id_snapshot()
+        try:
+            mesh = bpy.data.meshes.new(name=f"{name}_Mesh")
+            edit_mesh = bmesh.new()
+            try:
+                bmesh.ops.create_icosphere(edit_mesh, subdivisions=2, radius=0.5)
+                edit_mesh.to_mesh(mesh)
+            finally:
+                edit_mesh.free()
+            created = bpy.data.objects.new(name=name, object_data=mesh)
+            self._mark_reward(created, "mesh", name)
+            applied = self._ensure_object_linked(ctx, created)
+        except Exception:
+            self._remove_new_data_ids(before_load)
+            raise
+        if not applied:
+            self._remove_new_data_ids(before_load)
+        return applied
 
-    def _ph_geo(self, name, obj):
+    def _ph_geo(self, name, obj, recover_existing):
         """Create placeholder geo nodes modifier when .blend file is missing."""
-        if obj:
-            obj.modifiers.new(name=name, type='NODES')
+        if recover_existing:
+            existing = self._find_marked_modifier(name)
+            if existing is not None:
+                return True
+        if obj is None:
+            return False
+        node_group = self._find_marked_node_group(name) if recover_existing else None
+        before_load = self._data_id_snapshot()
+        if node_group is None:
+            try:
+                node_group = bpy.data.node_groups.new(
+                    name=f"{name}_Reward",
+                    type="GeometryNodeTree",
+                )
+                node_group.interface.new_socket(
+                    name="Geometry",
+                    in_out='INPUT',
+                    socket_type="NodeSocketGeometry",
+                )
+                node_group.interface.new_socket(
+                    name="Geometry",
+                    in_out='OUTPUT',
+                    socket_type="NodeSocketGeometry",
+                )
+                group_input = node_group.nodes.new("NodeGroupInput")
+                group_output = node_group.nodes.new("NodeGroupOutput")
+                node_group.links.new(
+                    group_input.outputs["Geometry"],
+                    group_output.inputs["Geometry"],
+                )
+                self._mark_reward(node_group, "geo_nodes", name)
+            except Exception:
+                self._remove_new_data_ids(before_load)
+                raise
+        modifier = None
+        try:
+            modifier = obj.modifiers.new(name=name, type='NODES')
+            if modifier is None:
+                applied = False
+            else:
+                modifier.node_group = node_group
+                applied = (
+                    any(item == modifier for item in obj.modifiers)
+                    and modifier.node_group == node_group
+                    and self._marker_matches(node_group, "geo_nodes", name)
+                )
+        except Exception:
+            if modifier is not None:
+                obj.modifiers.remove(modifier)
+            self._remove_new_data_ids(before_load)
+            raise
+        if not applied:
+            if modifier is not None:
+                obj.modifiers.remove(modifier)
+            self._remove_new_data_ids(before_load)
+        return applied
 
 
 class ACH_OT_PinAchievement(bpy.types.Operator):
