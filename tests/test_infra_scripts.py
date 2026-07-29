@@ -267,17 +267,41 @@ def test_current_handoff_guard_rejects_publish_authorization_mutant():
     handoff = (ROOT / "docs" / "handoff" / "current.md").read_text(encoding="utf-8")
     assert verify_codex_plugin.current_handoff_atomicity_errors(handoff) == []
 
-    prohibition = (
-        "No push, PR, tag, GitHub Release, version bump, production asset "
-        "addition, or real `~/BlenderAchievements` access is authorized."
+    merged_boundary = (
+        "None for the merged source slice. PR #17 merged exact head "
+        "`213babb6e29e023617a66600e4b9d8375ea466d9` into `main` as "
+        "`396dda957908b26c94d73387bcddf14712a4c23c` after Fast Gate and "
+        "Blender 5.0.1 / 5.1.2 / 5.2.0 succeeded. CI created and removed "
+        "disposable per-job ZIP/install state; no tag, GitHub Release, version "
+        "bump, production asset addition, canonical/retained/published extension "
+        "artifact, or real "
+        "`~/BlenderAchievements` access was performed."
     )
     authorization = (
         "Push, PR, tag, GitHub Release, version bump, production asset addition, "
         "and real `~/BlenderAchievements` access are authorized."
     )
-    assert prohibition in handoff
-    mutant = handoff.replace(prohibition, authorization, 1)
+    assert merged_boundary in handoff
+    mutant = handoff.replace(merged_boundary, authorization, 1)
     assert verify_codex_plugin.current_handoff_atomicity_errors(mutant)
+
+    wrong_merge = handoff.replace(
+        "396dda957908b26c94d73387bcddf14712a4c23c",
+        "0000000000000000000000000000000000000000",
+    )
+    assert verify_codex_plugin.current_handoff_atomicity_errors(wrong_merge)
+
+    truthful_ci_artifact_boundary = (
+        "CI created and removed disposable per-job ZIP/install state; no canonical, "
+        "retained, or published extension artifact was produced."
+    )
+    assert truthful_ci_artifact_boundary in handoff
+    transient_denial = handoff.replace(
+        truthful_ci_artifact_boundary,
+        "No extension ZIP/install artifact was created.",
+        1,
+    )
+    assert verify_codex_plugin.current_handoff_atomicity_errors(transient_denial)
 
     duplicate_blockers = handoff + (
         "\n## Blockers\n\nPush, PR, tag, and GitHub Release are authorized.\n"
@@ -679,7 +703,9 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "Reward Claim Atomicity",
         "`codex/reward-claim-atomicity`",
         "`origin/main@9cd26bd616c861578bc026a627c1796dddcac655`",
-        "PR #16 is already merged",
+        "PR #17 merged exact head",
+        "`213babb6e29e023617a66600e4b9d8375ea466d9`",
+        "`396dda957908b26c94d73387bcddf14712a4c23c`",
         "ADR 0007",
         "prospective claim",
         "idempotent",
@@ -691,7 +717,7 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "219 licensed PNG files",
         "11 approved tutorial URLs",
         "20 licensed reward `.blend` files",
-        "No push, PR, tag, GitHub Release",
+        "no tag, GitHub Release, version bump",
     ):
         assert phrase in current_text
     assert "BLENDER_5_2_ALPHA_URL" not in current_text

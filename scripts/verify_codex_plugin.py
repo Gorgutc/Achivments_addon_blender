@@ -202,6 +202,13 @@ def current_handoff_atomicity_errors(text: str) -> list[str]:
     required_markers = (
         "codex/reward-claim-atomicity",
         "9cd26bd616c861578bc026a627c1796dddcac655",
+        "213babb6e29e023617a66600e4b9d8375ea466d9",
+        "396dda957908b26c94d73387bcddf14712a4c23c",
+        "PR #17",
+        (
+            "CI created and removed disposable per-job ZIP/install state; no "
+            "canonical, retained, or published extension artifact was produced."
+        ),
         "ADR 0007",
         "prospective claim",
         "idempotent",
@@ -213,33 +220,37 @@ def current_handoff_atomicity_errors(text: str) -> list[str]:
 
     blockers = markdown_section(text, "Blockers")
     expected_blockers = (
-        "None for local implementation and verification. No push, PR, tag, "
-        "GitHub Release, version bump, production asset addition, or real "
-        "`~/BlenderAchievements` access is authorized."
+        "None for the merged source slice. PR #17 merged exact head "
+        "`213babb6e29e023617a66600e4b9d8375ea466d9` into `main` as "
+        "`396dda957908b26c94d73387bcddf14712a4c23c` after Fast Gate and "
+        "Blender 5.0.1 / 5.1.2 / 5.2.0 succeeded. CI created and removed "
+        "disposable per-job ZIP/install state; no tag, GitHub Release, version "
+        "bump, production asset addition, canonical/retained/published extension "
+        "artifact, or real "
+        "`~/BlenderAchievements` access was performed."
     )
     if blockers != expected_blockers:
-        errors.append("Blockers must preserve the exact no-publication/no-real-data boundary")
+        errors.append("Blockers must preserve exact merged-source and no-release facts")
 
     next_start = markdown_section(text, "Next Start Prompt")
     expected_next_start = (
-        "Verify the exact local branch/commit and current `origin/main` before "
-        "continuing. Do not redo reward claim atomicity. Take one separate task "
-        "at a time; the recommended next task is a research-only specification "
-        "for tutorial result verification and a defensible 90% threshold. Keep "
-        "real `~/BlenderAchievements` untouched and do not publish or release "
-        "without explicit owner authorization."
+        "Verify current `main` contains PR #17 head "
+        "`213babb6e29e023617a66600e4b9d8375ea466d9`, merge "
+        "`396dda957908b26c94d73387bcddf14712a4c23c`, and this containing "
+        "handoff closeout before continuing. Do not redo reward claim atomicity. "
+        "Take one separate task at a time; the recommended next task is a "
+        "research-only specification for tutorial result verification and a "
+        "defensible 90% threshold. Keep real `~/BlenderAchievements` untouched; "
+        "any tag, GitHub Release, version bump, production asset publication, or "
+        "cloud/auth change requires separate owner authorization."
     )
     if next_start != expected_next_start:
         errors.append("Next Start Prompt must preserve the exact continuation boundary")
 
     authorization_scan = text
     for allowed_statement in (
-        "No install/ZIP/release gate is authorized for this slice.",
-        (
-            "No push, PR, tag, GitHub Release, version bump, production asset "
-            "addition, or real `~/BlenderAchievements` access is authorized."
-        ),
-        "do not publish or release without explicit owner authorization.",
+        expected_blockers,
+        expected_next_start,
         (
             "- Predicate semantics, deeper fixtures, UI/GPU/handler decomposition, "
             "production cloud, release versioning, tag, and GitHub Release remain "
