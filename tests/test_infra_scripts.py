@@ -245,6 +245,7 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "docs/agent/adrs/0005-active-time-monotonic-window.md" in result.stdout
     assert "docs/agent/adrs/0006-xp-level-reachability.md" in result.stdout
     assert "docs/agent/adrs/0007-reward-claim-atomicity.md" in result.stdout
+    assert "active release version surfaces are exact and synchronized" in result.stdout
     assert "workflow exists: .github/workflows/fast-gate.yml" in result.stdout
     assert "workflow exists: .github/workflows/blender-smoke.yml" in result.stdout
     assert "historical roadmap is explicitly superseded" in result.stdout
@@ -255,6 +256,8 @@ def test_verify_codex_plugin_passes_current_infra_contract():
     assert "quality tooling CI mirror includes predicate verifier" in result.stdout
     assert "session-start pointer includes predicate verifier" in result.stdout
     assert "release guidance includes predicate verifier" in result.stdout
+    assert "active release authorities reject additive release permission" in result.stdout
+    assert "lesson-result verification remains a closed research draft" in result.stdout
     assert "current handoff tracks reward claim atomicity" in result.stdout
 
 
@@ -267,22 +270,13 @@ def test_current_handoff_guard_rejects_publish_authorization_mutant():
     handoff = (ROOT / "docs" / "handoff" / "current.md").read_text(encoding="utf-8")
     assert verify_codex_plugin.current_handoff_atomicity_errors(handoff) == []
 
-    merged_boundary = (
-        "None for the merged source slice. PR #17 merged exact head "
-        "`213babb6e29e023617a66600e4b9d8375ea466d9` into `main` as "
-        "`396dda957908b26c94d73387bcddf14712a4c23c` after Fast Gate and "
-        "Blender 5.0.1 / 5.1.2 / 5.2.0 succeeded. CI created and removed "
-        "disposable per-job ZIP/install state; no tag, GitHub Release, version "
-        "bump, production asset addition, canonical/retained/published extension "
-        "artifact, or real "
-        "`~/BlenderAchievements` access was performed."
+    source_candidate_boundary = "separate explicit owner publication acceptance"
+    assert source_candidate_boundary in handoff
+    mutant = handoff.replace(
+        source_candidate_boundary,
+        "GitHub Release is authorized",
+        1,
     )
-    authorization = (
-        "Push, PR, tag, GitHub Release, version bump, production asset addition, "
-        "and real `~/BlenderAchievements` access are authorized."
-    )
-    assert merged_boundary in handoff
-    mutant = handoff.replace(merged_boundary, authorization, 1)
     assert verify_codex_plugin.current_handoff_atomicity_errors(mutant)
 
     wrong_merge = handoff.replace(
@@ -291,17 +285,14 @@ def test_current_handoff_guard_rejects_publish_authorization_mutant():
     )
     assert verify_codex_plugin.current_handoff_atomicity_errors(wrong_merge)
 
-    truthful_ci_artifact_boundary = (
-        "CI created and removed disposable per-job ZIP/install state; no canonical, "
-        "retained, or published extension artifact was produced."
-    )
-    assert truthful_ci_artifact_boundary in handoff
-    transient_denial = handoff.replace(
-        truthful_ci_artifact_boundary,
-        "No extension ZIP/install artifact was created.",
+    historical_boundary = "historical `achievements-0.2.2.zip`"
+    assert historical_boundary in handoff
+    stale_identity = handoff.replace(
+        historical_boundary,
+        "current `achievements-0.2.2.zip`",
         1,
     )
-    assert verify_codex_plugin.current_handoff_atomicity_errors(transient_denial)
+    assert verify_codex_plugin.current_handoff_atomicity_errors(stale_identity)
 
     duplicate_blockers = handoff + (
         "\n## Blockers\n\nPush, PR, tag, and GitHub Release are authorized.\n"
@@ -335,6 +326,320 @@ def test_current_handoff_guard_rejects_publish_authorization_mutant():
     assert verify_codex_plugin.current_handoff_atomicity_errors(imperative_done)
     assert verify_codex_plugin.current_handoff_atomicity_errors(create_release_done)
     assert verify_codex_plugin.current_handoff_atomicity_errors(modal_push_done)
+
+
+def test_release_guidance_guard_rejects_stale_identity_and_missing_ship_boundary():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_codex_plugin
+
+    guidance = verify_codex_plugin.active_release_guidance()
+    assert verify_codex_plugin.release_guidance_errors(guidance) == []
+
+    stale_identity = dict(guidance)
+    stale_identity["README.md"] = stale_identity["README.md"].replace(
+        "Release identity: `0.2.3` source candidate.",
+        "Release identity: `0.2.2` source candidate.",
+        1,
+    )
+    assert verify_codex_plugin.release_guidance_errors(stale_identity)
+
+    missing_acceptance = dict(guidance)
+    missing_acceptance["README.md"] = missing_acceptance["README.md"].replace(
+        "No tag, GitHub Release, or publication is authorized without explicit owner ship acceptance; a local retained candidate is not publication.",
+        "A verified candidate may be published.",
+        1,
+    )
+    assert verify_codex_plugin.release_guidance_errors(missing_acceptance)
+
+    canonical_candidate = dict(guidance)
+    quality_gate = "plugins/achievements-blender-codex/skills/achievements-quality-gate/SKILL.md"
+    canonical_candidate[quality_gate] = canonical_candidate[quality_gate].replace(
+        "audited validation/retained local-candidate SHA",
+        "frozen canonical SHA",
+        1,
+    )
+    assert verify_codex_plugin.release_guidance_errors(canonical_candidate)
+
+    retention_without_owner = dict(guidance)
+    retention_without_owner["README.md"] = retention_without_owner["README.md"].replace(
+        "A green full gate remains ephemeral; separate explicit owner candidate-retention acceptance is required before any local retention, and it is not publication.",
+        "A full gate may retain one local candidate.",
+        1,
+    )
+    assert verify_codex_plugin.release_guidance_errors(retention_without_owner)
+
+
+def test_release_authority_guard_rejects_additive_permission_mutants():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_codex_plugin
+
+    authorities = verify_codex_plugin.active_release_authorities()
+    assert verify_codex_plugin.release_authority_errors(authorities) == []
+
+    historical_install = dict(authorities)
+    historical_install["AGENTS.md"] += "\nInstall achievements-0.2.2.zip as the current release.\n"
+    assert verify_codex_plugin.release_authority_errors(historical_install)
+
+    stage_a_retention = dict(authorities)
+    stage_a_retention["docs/handoff/current.md"] += (
+        "\nStage A may preserve the validation ZIP without owner acceptance.\n"
+    )
+    assert verify_codex_plugin.release_authority_errors(stage_a_retention)
+
+    publication = dict(authorities)
+    publication["README.md"] += "\nTag and GitHub Release are authorized now.\n"
+    assert verify_codex_plugin.release_authority_errors(publication)
+
+    imperative_publish = dict(authorities)
+    imperative_publish["README.md"] += "\nPublish the verified 0.2.3 candidate now.\n"
+    assert verify_codex_plugin.release_authority_errors(imperative_publish)
+
+    full_gate_retention = dict(authorities)
+    full_gate_retention["README.md"] += "\nA full validation gate may retain one local candidate.\n"
+    assert verify_codex_plugin.release_authority_errors(full_gate_retention)
+
+    canonical_zip = dict(authorities)
+    canonical_zip["README.md"] += "\nThe 0.2.3 ZIP is the current canonical artifact.\n"
+    assert verify_codex_plugin.release_authority_errors(canonical_zip)
+
+    reviewer_release_mutants = (
+        "Stage A preserves one local candidate.",
+        "Push this branch now.",
+        "Publish the verified 0.2.3 candidate now.",
+        "Create the v0.2.3 tag now.",
+        "Create a GitHub Release now.",
+        "Install achievements-0.2.2.zip now.",
+        "Use achievements-0.2.2.zip as the current release artifact.",
+        "The 0.2.3 ZIP is the current canonical artifact.",
+        "No push is authorized; Push this branch now.",
+        "Stage C is authorized now.",
+        "Owner approved publication.",
+        "Owner has approved publication.",
+        "Publication was approved by the owner.",
+        "Publication is not unauthorized.",
+        "No publication is authorized, but publish the candidate now.",
+        "A future owner may authorize Stage C; publish now.",
+        "Tag creation no longer requires owner acceptance.",
+        "A future owner may authorize Stage C only after acceptance and publish now.",
+        "No publication is prohibited, publish now.",
+    )
+    for clause in reviewer_release_mutants:
+        mutant = dict(authorities)
+        mutant["README.md"] += f"\n{clause}\n"
+        assert verify_codex_plugin.release_authority_errors(mutant)
+
+    legitimate_stage_c = dict(authorities)
+    legitimate_stage_c["README.md"] += (
+        "\nStage C is not authorized in this session.\n"
+        "A future owner may authorize Stage C only after separate publication acceptance.\n"
+        "Only after separate explicit owner publication acceptance may Stage C create v0.2.3 "
+        "and a GitHub Release.\n"
+        "No push is authorized in this session.\n"
+        "No tag or GitHub Release is authorized in this session.\n"
+        "The historical achievements-0.2.2.zip must not be used.\n"
+        "Stage A does not retain, preserve, copy, or canonicalize a candidate.\n"
+        "Owner approval has not been granted.\n"
+        "Publication requires separate owner acceptance.\n"
+        "Owner approved PR #17.\n"
+        "Tag and GitHub Release remain blocked.\n"
+        "The process continues without publishing a candidate.\n"
+        "If Stage C is separately approved, a future task may publish the exact retained candidate.\n"
+    )
+    assert verify_codex_plugin.release_authority_errors(legitimate_stage_c) == []
+
+
+def test_release_version_parity_guard_rejects_one_stale_active_surface(monkeypatch, tmp_path):
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_codex_plugin
+
+    (tmp_path / "achievements").mkdir()
+    (tmp_path / "tests" / "blender").mkdir(parents=True)
+    root_init = tmp_path / "__init__.py"
+    metadata = tmp_path / "achievements" / "metadata.py"
+    manifest = tmp_path / "blender_manifest.toml"
+    project = tmp_path / "pyproject.toml"
+    root_init.write_text('bl_info = {"version": (0, 2, 3)}\n', encoding="utf-8")
+    metadata.write_text("ADDON_VERSION = (0, 2, 3)\n", encoding="utf-8")
+    manifest.write_text('version = "0.2.3"\n', encoding="utf-8")
+    project.write_text(
+        '[project]\nname = "achievements-blender-codex-infra"\nversion = "0.2.3"\n', encoding="utf-8"
+    )
+    lockfile = tmp_path / "uv.lock"
+    lockfile.write_text(
+        '[[package]]\nname = "achievements-blender-codex-infra"\nversion = "0.2.3"\n',
+        encoding="utf-8",
+    )
+    smoke_policy = tmp_path / "tests" / "blender" / "smoke_extension_policy.py"
+    smoke_policy.write_text(
+        "if tuple(module.ach_metadata.ADDON_VERSION) != (0, 2, 3):\n    pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(verify_codex_plugin, "ROOT", tmp_path)
+
+    assert verify_codex_plugin.release_version_parity_errors() == []
+    mutants = (
+        (root_init, 'bl_info = {"version": (0, 2, 2)}\n', "root bl_info version differs from the release identity"),
+        (metadata, "ADDON_VERSION = (0, 2, 2)\n", "achievements metadata version differs from the release identity"),
+        (manifest, 'version = "0.2.2"\n', "extension manifest version differs from the release identity"),
+        (
+            project,
+            '[project]\nname = "achievements-blender-codex-infra"\nversion = "0.2.2"\n',
+            "pyproject version differs from the release identity",
+        ),
+        (
+            lockfile,
+            '[[package]]\nname = "achievements-blender-codex-infra"\nversion = "0.2.2"\n',
+            "uv.lock root package version differs from the release identity",
+        ),
+        (
+            lockfile,
+            '[[package]]\nname = "achievements-blender-codex-infra"\nversion = "0.2.3"\n'
+            '[[package]]\nname = "achievements-blender-codex-infra"\nversion = "0.2.2"\n',
+            "uv.lock root package version differs from the release identity",
+        ),
+        (
+            lockfile,
+            'package = ["bad"]\n',
+            "uv.lock root package version differs from the release identity",
+        ),
+        (
+            smoke_policy,
+            "if tuple(module.ach_metadata.ADDON_VERSION) != (0, 2, 2):\n    pass\n",
+            "Blender smoke extension-policy version differs from the release identity",
+        ),
+        (
+            root_init,
+            'bl_info = {"version": (0, 2, 3)}\nbl_info = {"version": (0, 2, 2)}\n',
+            "root bl_info version differs from the release identity",
+        ),
+        (
+            metadata,
+            "ADDON_VERSION = (0, 2, 3)\nADDON_VERSION = (0, 2, 2)\n",
+            "achievements metadata version differs from the release identity",
+        ),
+    )
+    originals = {path: path.read_text(encoding="utf-8") for path, _mutant, _error in mutants}
+    for path, mutant, expected_error in mutants:
+        path.write_text(mutant, encoding="utf-8")
+        assert verify_codex_plugin.release_version_parity_errors() == [expected_error]
+        path.write_text(originals[path], encoding="utf-8")
+
+
+def test_lesson_result_research_guard_rejects_authorization_and_contract_mutants():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import verify_codex_plugin
+
+    research = (ROOT / "docs" / "research" / "lesson-result-verification.md").read_text(
+        encoding="utf-8"
+    )
+    assert verify_codex_plugin.lesson_result_verification_errors(research) == []
+
+    mutants = (
+        research.replace("implementation_authorized: false", "implementation_authorized: true", 1),
+        research.replace("threshold_basis_points: null", "threshold_basis_points: 9000", 1),
+        research.replace("Mandatory gates have weight 0.", "Mandatory gates are optional.", 1),
+        research.replace("`lesson_edit_basics`", "`lesson_vertices_basics`", 1),
+        research.replace("`calibration_required`", "`ready`", 1),
+        research.replace("no N/A, and no dynamic denominator", "N/A and dynamic denominator allowed", 1),
+        research.replace("invoke `RewardManager`", "invoke the existing reward manager"),
+        research.replace(
+            "schema `1.0.0`, the 105-achievement/9-lesson catalog, XP awards `5/10/20`, cap `1550`, local files-only permission, and disabled production networking remain frozen.",
+            "XP, schema, and network changes are allowed.",
+            1,
+        ),
+        research.replace(
+            "## Glossary\n",
+            "## Implementation Entry Gate\n",
+            1,
+        ),
+        research.replace("## Owner Decisions\n", "## Deferred Decisions\n", 1),
+        research.replace("fixture_refs\n```", "fixture_refs\nruntime_callback\n```", 1),
+        research.replace(
+            "OD-01: Approve or reject assessed outcomes, lesson URLs, and canonical reference outcomes for each lesson.",
+            "OD-01: Approve implementation now.",
+            1,
+        ),
+        research.replace(
+            "It is not an attempt id and does not include `extractor_version`.",
+            "It is an attempt id and includes `extractor_version`.",
+            1,
+        ),
+        research.replace(
+            "reuses the deterministic evaluation and never grants a new claim, XP, or reward",
+            "creates a new claim, XP, and reward",
+            1,
+        ),
+        research + "\nImplementation may begin.\n",
+        research + "\nImplementation is authorized.\n",
+        research + "\nThe threshold is 90%.\n",
+        research + "\napproved default threshold is 85%.\n",
+        research + "\nthreshold_basis_points: 9000\n",
+        research + "\nReward bridge is enabled.\n",
+        research + "\nLesson persistence is enabled.\n",
+        research + "\nXP writes are enabled.\n",
+        research + "\nRewardManager may be invoked.\n",
+        research + "\nWe may write rewards_claimed.\n",
+        research + "\nA lesson URL proves completion and grants XP.\n",
+    )
+    for mutant in mutants:
+        assert verify_codex_plugin.lesson_result_verification_errors(mutant)
+
+    reviewer_research_mutants = (
+        "Owner approved this implementation.",
+        "Start implementation now.",
+        "Begin implementation now.",
+        "Implementation is authorized.",
+        "Implementation is ready.",
+        "The entry gate is open.",
+        "Use 90% as the threshold.",
+        "The threshold is 85%.",
+        "threshold = 90%",
+        "RewardManager is invoked after pass.",
+        "Reward bridge is enabled.",
+        "Lesson persistence is authorized.",
+        "Passing assessment grants XP.",
+        "Passing assessment grants a reward.",
+        "A pass creates a claim.",
+        "Passing assessment writes persistence.",
+        "Lesson URL proves completion.",
+        "Implementation is not authorized; Start implementation now.",
+        "Owner approval is complete, so implementation may begin.",
+        "The owner has approved implementation.",
+        "This implementation was approved by the owner.",
+        "Implementation is not unauthorized.",
+        "The entry gate is not closed.",
+        "The entry gate is no longer closed.",
+        "An approved threshold of 85% applies.",
+        "Passing the lesson grants 10 XP.",
+        "A future owner may authorize implementation only after decisions and implementation may begin now.",
+        "No owner approval is needed, implementation may begin now.",
+    )
+    for clause in reviewer_research_mutants:
+        assert verify_codex_plugin.lesson_result_verification_errors(research + f"\n{clause}\n")
+
+    legitimate_future_owner = research + (
+        "\nA future owner may authorize implementation only after all entry-gate decisions.\n"
+        "No threshold is approved; `threshold_basis_points: null` remains required.\n"
+        "The reward bridge is disabled.\n"
+        "A ready value may appear in an adversarial fixture, but it is not an actual readiness state.\n"
+        "Implementation is not authorized.\n"
+        "Do not begin implementation now.\n"
+        "The threshold is 90%, rejected, unvalidated, and calibration-only.\n"
+        "RewardManager is not invoked after pass.\n"
+        "Lesson persistence is not authorized.\n"
+        "Passing assessment does not grant XP, reward, or a claim.\n"
+        "A lesson URL does not prove completion.\n"
+        "A future owner may approve a separate ADR only after owner acceptance.\n"
+    )
+    assert verify_codex_plugin.lesson_result_verification_errors(legitimate_future_owner) == []
 
 
 def test_find_blender_reports_a_usable_executable(tmp_path):
@@ -717,7 +1022,8 @@ def test_iteration_plan_and_handoff_artifacts_are_present():
         "219 licensed PNG files",
         "11 approved tutorial URLs",
         "20 licensed reward `.blend` files",
-        "no tag, GitHub Release, version bump",
+        "0.2.3",
+        "explicit owner ship acceptance",
     ):
         assert phrase in current_text
     assert "BLENDER_5_2_ALPHA_URL" not in current_text
@@ -747,7 +1053,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     assert data["schema_version"] == "1.0.0"
     assert data["id"] == "achievements"
-    assert data["version"] == "0.2.2"
+    assert data["version"] == "0.2.3"
     assert data["name"] == "Achievements"
     assert data["type"] == "add-on"
     assert data["blender_version_min"] == "5.0.0"
@@ -783,7 +1089,7 @@ def test_iteration_3_package_skeleton_and_manifest_are_safe_to_import(tmp_path):
     )
     assert result.returncode == 0, result.stdout
     assert "Achievements" in result.stdout
-    assert "(0, 2, 2)" in result.stdout
+    assert "(0, 2, 3)" in result.stdout
     assert "(5, 0, 0)" in result.stdout
     assert "Blender 5.0.1" in result.stdout
     assert "Blender 5.1.2" in result.stdout
@@ -976,26 +1282,11 @@ uv run pytest
     for path in extension_guidance_paths[:4] + (extension_guidance_paths[4],):
         text = path.read_text(encoding="utf-8")
         assert "reports/extension/" in text, path
-        assert "deliberately" in text, path
-        assert "byte-copy" in text, path
-        assert re.search(
-            r"destination\s+must\s+not\s+already\s+exist",
-            text,
-            flags=re.IGNORECASE,
-        ), path
-        assert "source/destination SHA-256" in text, path
-        assert re.search(
-            r"never\s+rebuild\s+or\s+overwrite",
-            text,
-            flags=re.IGNORECASE,
-        ), path
+        assert "Release identity: `0.2.3` source candidate." in text, path
+        assert "explicit owner ship acceptance" in text, path
+        assert re.search(r"local\s+retained\s+candidate\s+is\s+not\s+publication", text), path
+        assert "historical `achievements-0.2.2.zip`" in text, path
         assert "Copy-Item -Force" not in text, path
-        assert re.search(
-            r"per-version\s+self-built\s+ZIPs\s+(?:are|as)\s+build\s+evidence\s+only",
-            text,
-            flags=re.IGNORECASE,
-        ), path
-        assert re.search(r"exact\s+frozen\s+canonical\s+SHA", text), path
 
     for path in (
         ROOT / "README.md",
@@ -1080,7 +1371,7 @@ uv run pytest
     assert "9 lessons" in stale_catalog_reference
 
     packaging_release = (ROOT / "docs" / "agent" / "packaging-release.md").read_text(encoding="utf-8")
-    assert "Achievements 0.2.2 candidate" in packaging_release
+    assert "Achievements 0.2.3 source candidate" in packaging_release
     assert "scripts/build_extension.py" in packaging_release
     assert "reports/extension-validation/<run-id>/blender-5.1.2/source" in packaging_release
     assert "release package excludes docs/tests/plugins/scripts" in packaging_release

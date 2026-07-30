@@ -191,6 +191,113 @@ def test_release_helper_defaults_to_print_only(monkeypatch, tmp_path, capsys):
     assert "--run-blender" in output
 
 
+def test_release_identity_guard_rejects_reserved_identity_before_blender_spawn(
+    monkeypatch, tmp_path, capsys
+):
+    build_extension = load_build_extension_module()
+
+    assert build_extension.release_identity_errors(ROOT) == []
+    monkeypatch.setattr(
+        build_extension,
+        "release_identity_errors",
+        lambda *_args, **_kwargs: [
+            "reserved historical identity 0.2.2 cannot launch Blender extension commands"
+        ],
+    )
+    monkeypatch.setattr(
+        build_extension,
+        "find_blender_path",
+        lambda: (_ for _ in ()).throw(AssertionError("Blender discovery must not run")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_extension.py",
+            "--run-blender",
+            "--source-dir",
+            str(tmp_path / "source"),
+            "--output-dir",
+            str(tmp_path / "output"),
+        ],
+    )
+
+    assert build_extension.main() == 1
+    assert "reserved historical identity 0.2.2" in capsys.readouterr().err
+
+
+def test_print_only_release_identity_guard_rejects_reserved_identity_before_preparation(
+    monkeypatch, tmp_path, capsys
+):
+    build_extension = load_build_extension_module()
+    payload = (Path("achievements/levels.py"),) + tuple(
+        Path(f"candidate-{index}.py")
+        for index in range(build_extension.CURRENT_PAYLOAD_MEMBER_COUNT - 1)
+    )
+    monkeypatch.setattr(
+        build_extension,
+        "_working_tree_bytes",
+        lambda *_args, **_kwargs: b'version = "0.2.2"\n',
+    )
+    monkeypatch.setattr(build_extension, "release_payload_paths", lambda *_args, **_kwargs: payload)
+    monkeypatch.setattr(
+        build_extension,
+        "prepare_release_source",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("preparation must not run")),
+    )
+    monkeypatch.setattr(
+        build_extension,
+        "find_blender_path",
+        lambda: (_ for _ in ()).throw(AssertionError("Blender discovery must not run")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_extension.py",
+            "--source-dir",
+            str(tmp_path / "source"),
+            "--output-dir",
+            str(tmp_path / "output"),
+        ],
+    )
+
+    assert build_extension.main() == 1
+    captured = capsys.readouterr()
+    assert "reserved historical identity 0.2.2" in captured.err
+    assert "Commands were not executed" not in captured.out
+    assert "extension build" not in captured.out
+
+
+def test_release_identity_errors_reject_reserved_historical_identity(monkeypatch):
+    build_extension = load_build_extension_module()
+    payload = (Path("achievements/levels.py"),) + tuple(
+        Path(f"candidate-{index}.py")
+        for index in range(build_extension.CURRENT_PAYLOAD_MEMBER_COUNT - 1)
+    )
+    monkeypatch.setattr(
+        build_extension,
+        "_working_tree_bytes",
+        lambda *_args, **_kwargs: b'version = "0.2.2"\n',
+    )
+    monkeypatch.setattr(build_extension, "release_payload_paths", lambda *_args, **_kwargs: payload)
+
+    assert build_extension.release_identity_errors(ROOT) == [
+        "reserved historical identity 0.2.2 cannot launch Blender extension commands",
+        "expected release identity 0.2.3, got '0.2.2'",
+    ]
+
+
+def test_release_identity_guard_requires_current_payload_members(monkeypatch):
+    build_extension = load_build_extension_module()
+    payload_without_levels = tuple(
+        Path(f"candidate-{index}.py") for index in range(build_extension.CURRENT_PAYLOAD_MEMBER_COUNT)
+    )
+    monkeypatch.setattr(build_extension, "release_payload_paths", lambda *_args, **_kwargs: payload_without_levels)
+
+    assert "current release payload must include achievements/levels.py" in build_extension.release_identity_errors(ROOT)
+
+
 def test_shell_command_formatting_quotes_paths_with_spaces():
     build_extension = load_build_extension_module()
     command = [
@@ -227,7 +334,7 @@ def test_extension_runner_uses_one_disposable_isolated_profile(tmp_path):
     )
     outputs = {
         "validate": 'Success parsing TOML in "source"\n',
-        "build": 'building: achievements-0.2.2.zip\ncomplete\ncreated: "candidate.zip"\n',
+        "build": 'building: achievements-0.2.3.zip\ncomplete\ncreated: "candidate.zip"\n',
         "server-generate": "found 1 packages.\n",
     }
     calls = []
@@ -358,7 +465,7 @@ def write_minimal_payload(root: Path, *, line_ending: bytes = b"\n") -> None:
     root.mkdir(parents=True)
     package = root / "achievements"
     package.mkdir()
-    (root / "blender_manifest.toml").write_bytes(b'version = "0.2.2"' + line_ending)
+    (root / "blender_manifest.toml").write_bytes(b'version = "0.2.3"' + line_ending)
     (root / "LICENSE").write_bytes(b"GNU GPL v3" + line_ending)
     (root / "__init__.py").write_bytes(b"ROOT = True" + line_ending)
     (package / "__init__.py").write_bytes(b"PACKAGE = True" + line_ending)

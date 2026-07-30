@@ -1,4 +1,4 @@
-# Achievements Addon v0.2.2 — Руководство разработчика
+# Achievements Addon v0.2.3 — Руководство разработчика
 
 Аддон геймификации для Blender 5.0+.
 Поддерживаемый минимум — Blender 5.0; blocking-проверки выполняются на Blender 5.0.1, 5.1.2 и 5.2.0.
@@ -14,11 +14,18 @@ Offline sync planning is isolated in `achievements/sync.py`; the backend is disa
 
 ---
 
+## Release Identity And Ship Authorization
+
+Release identity: `0.2.3` source candidate.
+No tag, GitHub Release, or publication is authorized without explicit owner ship acceptance; a local retained candidate is not publication.
+The historical `achievements-0.2.2.zip` is immutable pre-PR16 evidence and is not a current install or build artifact.
+Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; (B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; (C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none.
+
 ## Установка
 
 ### Вариант 1 — ZIP
 1. `Edit → Preferences → Add-ons → Install from Disk...`
-2. Выбрать `reports/extension/achievements-0.2.2.zip`, созданный release-командами ниже. Папка `reports/` игнорируется git и не хранит артефакт в репозитории.
+2. Не использовать historical `achievements-0.2.2.zip` и не ожидать current install ZIP в `reports/extension/`: 0.2.3 пока является только source candidate. A green full gate remains ephemeral; separate explicit owner candidate-retention acceptance is required before any local retention, and it is not publication.
 3. Включить галочку «Achievements»
 
 ### Вариант 2 — Локальная проверка из рабочей папки
@@ -110,23 +117,20 @@ Use a fresh, never-used per-run output directory for every `server-generate`
 gate: replace `<run-id>` on each rerun. The helper rejects pre-existing ZIPs or
 repository metadata and never deletes them.
 The default `reports/extension/` directory is therefore unsuitable for a
-server gate while older canonical ZIPs are present. After all
-version-specific build gates and ZIP audits pass, select one exact verified
-`achievements-0.2.2.zip`, freeze its SHA-256/member digests, and deliberately
-byte-copy it from its fresh output to
-`reports/extension/achievements-0.2.2.zip`. The destination must not already
-exist; verify identical source/destination SHA-256. Never rebuild
-or overwrite the canonical ZIP, and do not implicitly clean or replace the
-older baseline. Use that exact frozen canonical SHA for install/enable and
-register/unregister smoke on Blender 5.0.1, 5.1.2, and 5.2.0; per-version
-self-built ZIPs are build evidence only. Without `--run-blender`, the helper only prints the
-auditable commands; do not run those commands against a real Blender user
-profile. `--revision HEAD` reads committed Git blobs and rejects dirty or
+server gate while older canonical ZIPs are present. For 0.2.3, keep every
+verified ZIP in its fresh per-run output: audit allowlist, member digests, Git
+bytes, SHA-256, and size, but do not byte-copy it into a canonical path. A
+verified candidate is build evidence only until explicit owner ship acceptance
+selects an exact retained artifact, `v0.2.3` tag, and GitHub Release plan. A
+local retained candidate is not publication. Do not rebuild, overwrite,
+clean, or relabel the historical 0.2.2 ZIP. Without `--run-blender`, the helper
+only prints auditable commands; do not run those commands against a real Blender
+user profile. `--revision HEAD` reads committed Git blobs and rejects dirty or
 untracked runtime payload; working-tree mode LF-normalizes known UTF-8 runtime
 files.
 The helper refuses to clean or write a release source directory outside the generated `reports/` tree.
 
-The audited release package is deliberately published to `reports/extension/achievements-0.2.2.zip`. The immutable `achievements-0.2.1.zip` and `achievements-0.2.0.zip` predecessors are not overwritten. The release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
+The current source candidate has no canonical or published ZIP. The historical 0.2.2 ZIP and its 0.2.1/0.2.0 predecessors remain immutable evidence and are not overwritten or relabeled. Any future release package excludes docs/tests/plugins/scripts, GitHub workflow files, repository instructions, generated reports, and legacy source copies; it includes only `blender_manifest.toml`, `LICENSE`, root `__init__.py`, and the `achievements/` runtime package. Reward `.blend` assets are not bundled until asset licenses are explicitly approved; missing-asset fallbacks remain supported.
 
 ---
 

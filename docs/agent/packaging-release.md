@@ -1,6 +1,13 @@
 # Packaging And Release
 
-Release packaging produces the Achievements 0.2.2 candidate from one canonical runtime.
+Release packaging validates the Achievements 0.2.3 source candidate from one canonical runtime.
+
+## Release Identity And Ship Authorization
+
+Release identity: `0.2.3` source candidate.
+No tag, GitHub Release, or publication is authorized without explicit owner ship acceptance; a local retained candidate is not publication.
+The historical `achievements-0.2.2.zip` is immutable pre-PR16 evidence and is not a current install or build artifact.
+Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; (B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; (C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none.
 
 The extension manifest is `blender_manifest.toml`. Blender registration lives in root `__init__.py`; `achievements/` contains runtime support modules. Root imports those modules through package-relative paths inside Blender's installed extension namespace and never mutates `sys.path`. ADR 0002 retired `achievements_v01 (4).py`, and verification rejects any second runtime copy. ADR 0004 freezes the namespace and manifest permission policy.
 
@@ -19,10 +26,12 @@ The release package excludes docs/tests/plugins/scripts, GitHub workflow files, 
 - root `__init__.py`
 - `achievements/`
 
-The audited ZIP is deliberately published at
-`reports/extension/achievements-0.2.2.zip`. `reports/` is ignored and remains
-generated local output.
-The prior `achievements-0.2.1.zip` and `achievements-0.2.0.zip` candidates are immutable evidence and must not be overwritten.
+`reports/` is ignored generated local output. A full validation gate leaves
+0.2.3 ZIPs ephemeral in fresh per-run outputs. Only separate explicit owner
+candidate-retention acceptance may preserve one exact audited local-candidate
+SHA; that local candidate is not publication. The
+historical 0.2.2, 0.2.1, and 0.2.0 ZIPs are immutable evidence and must not be
+overwritten, relabeled, or used as current artifacts.
 
 The packaged manifest must contain exactly
 `files = "Store progress and load local reward assets"` under `[permissions]`.
@@ -67,27 +76,14 @@ execution; the helper rejects stale ZIP/index entries and never deletes or
 mixes an older baseline implicitly.
 
 The default `reports/extension/` directory is unsuitable for a server gate while
-older canonical ZIPs are present. After all version-specific
-build gates pass, audit allowlist, member digests, Git bytes, SHA-256, and size
-in the fresh outputs. Then select one exact audited artifact, freeze its
-SHA-256/member digests, and deliberately byte-copy
-that same
-`achievements-0.2.2.zip` to
-`reports/extension/achievements-0.2.2.zip`. This publication copy is separate
-from the helper: never rebuild or overwrite the canonical ZIP, and never delete
-or mix an existing baseline implicitly. The canonical destination must not
-already exist; verify identical source/destination SHA-256.
-
-After recording and comparing the audited hashes, the deliberate Windows copy
-is:
-
-```powershell
-$verifiedZip = "reports/extension-validation/<run-id>/blender-5.2.0/achievements-0.2.2.zip"
-$canonicalZip = "reports/extension/achievements-0.2.2.zip"
-if (Test-Path -LiteralPath $canonicalZip) { throw "Canonical candidate already exists" }
-Copy-Item -LiteralPath $verifiedZip -Destination $canonicalZip
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $verifiedZip).Hash -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $canonicalZip).Hash) { throw "Published candidate hash mismatch" }
-```
+older canonical ZIPs are present. After all version-specific build gates pass,
+audit allowlist, member digests, Git bytes, SHA-256, and size in fresh outputs.
+Do not byte-copy a 0.2.3 validation ZIP to a canonical path during this task,
+and do not rebuild, overwrite, delete, or mix an existing historical baseline.
+After a full gate, only separate explicit owner candidate-retention acceptance
+may preserve a local candidate, which remains non-canonical and not
+publication. Only separate explicit owner publication acceptance may select
+that exact retained 0.2.3 artifact for a `v0.2.3` tag and GitHub Release.
 
 ## Asset Policy
 
@@ -106,7 +102,8 @@ Before shipping a release package:
 - Treat any `[extension-cli:WARN]` as a failed release gate even when the helper
   exits zero; resolve cleanup residue and rerun in a new `<run-id>`.
 - Install/enable the ZIP and run register/unregister smoke on all three targets.
-- Use the same exact frozen canonical SHA for those three install smokes;
+- Use the same exact audited validation/retained local-candidate SHA for those
+  three install smokes. That retained local candidate is not publication;
   per-version self-built ZIPs are build evidence only.
 - Confirm the allowlist, absence of symlink/traversal/duplicates, Git-blob byte equality, member digests, final ZIP SHA-256, and byte size.
 - Confirm package-relative runtime imports, absence of runtime `sys.path` mutation, the exact manifest `files` reason, and absence of manifest `network` permission.

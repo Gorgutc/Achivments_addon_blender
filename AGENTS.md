@@ -23,7 +23,7 @@ Known frozen facts:
 - Canonical active add-on file is `__init__.py`.
 - `achievements_v01 (4).py` was retired in the approved 0.2.0 technical closeout; ADR 0002 preserves its baseline blob, hashes, and recovery procedure. Do not reintroduce a second runtime without an explicit owner decision.
 - The add-on currently defines 105 achievements, 9 lessons, JSON persistence under `~/BlenderAchievements/`, handlers, timers, GPU draw UI, and reward loading from `.blend` assets.
-- Current add-on identity is 0.2.2 and `bl_info["blender"] == (5, 0, 0)`.
+- Current source-candidate identity is 0.2.3 and `bl_info["blender"] == (5, 0, 0)`. Stage A full validation outputs are ephemeral and authorize no retention, canonical artifact, or publication. Stage B needs separate explicit owner candidate-retention acceptance for one exact audited local candidate SHA, still non-canonical and not publication. Stage C needs separate explicit owner publication acceptance for `v0.2.3` and GitHub Release from that exact retained candidate; this session grants none.
 - Shipped runtime imports stay inside the Blender extension namespace; do not add the extension directory to `sys.path` or use absolute intra-package `achievements.*` imports.
 - Extension removal is routed through Blender's native `Extensions` UI; add-on-owned operators must not self-uninstall or delete `~/BlenderAchievements`.
 - `subsurface_skin` checks exact active Subsurface Weight, and `denoiser_render` requires a completed Cycles-render event.

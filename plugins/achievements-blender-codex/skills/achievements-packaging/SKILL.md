@@ -8,6 +8,11 @@ description: Build and audit deterministic Blender extension release candidates.
 Use for packaging, extension validation, and release-candidate audits.
 
 Rules:
+- Release identity: `0.2.3` source candidate. No tag, GitHub Release, or
+  publication is authorized without explicit owner ship acceptance; a local
+  retained candidate is not publication. The historical `achievements-0.2.2.zip` is immutable
+  pre-PR16 evidence and is not a current install or build artifact.
+- Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; (B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; (C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none.
 - Use `scripts/build_extension.py` instead of assembling ZIP members manually.
 - Working-tree mode normalizes known UTF-8 runtime text to LF and copies binary
   payloads byte-for-byte.
@@ -28,14 +33,13 @@ Rules:
   with a new `<run-id>`. Fail closed on stale ZIP/index entries; never delete or
   mix an older baseline implicitly.
 - `reports/extension/` is unsuitable for a server gate while older canonical
-  ZIPs are present. Audit the ZIP in a fresh output
-  and only then select one exact verified 0.2.2 candidate and deliberately
-  byte-copy it to its canonical path. The destination must not already exist;
-  confirm identical source/destination SHA-256 and never rebuild or overwrite
-  the canonical ZIP.
-- Treat per-version self-built ZIPs as build evidence only. Run install/enable
-  and register/unregister smoke on all supported versions against the same exact
-  frozen canonical SHA.
+  ZIPs are present. Audit each 0.2.3 ZIP only in its fresh output; do not
+  byte-copy it to a canonical path, rebuild or overwrite historical artifacts,
+  or use the historical 0.2.2 ZIP as current evidence.
+- Treat per-version self-built ZIPs as build evidence only. A full gate leaves
+  them ephemeral; only separate explicit owner candidate-retention acceptance
+  may preserve one exact audited local-candidate SHA. A separate explicit owner
+  publication acceptance is required for `v0.2.3` and GitHub Release.
 - Record the final ZIP SHA-256, byte size, member list, and member digests.
 - Preserve immutable 0.2.1 and 0.2.0 candidates as historical evidence; never
   overwrite or relabel them.
