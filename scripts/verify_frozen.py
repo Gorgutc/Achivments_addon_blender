@@ -763,7 +763,7 @@ def verify_addon_contract() -> None:
         catalog.catalog_digest(),
     )
     record("bl_info exists", values["bl_info"].get("name") == "Achievements")
-    record("bl_info version is 0.2.2", values["bl_info"].get("version") == (0, 2, 2))
+    record("bl_info version is 0.2.3", values["bl_info"].get("version") == (0, 2, 3))
     record("bl_info Blender floor is 5.0", values["bl_info"].get("blender") == (5, 0, 0))
     record(
         "bl_info advertises 105 achievements",

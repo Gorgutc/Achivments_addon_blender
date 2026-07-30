@@ -27,6 +27,11 @@ GitHub Actions:
 Hooks run fast static checks only. Blender smoke is intentionally reserved for manual deep and ship gates plus the dedicated Blender smoke workflow.
 
 Release packaging:
+- Release identity: `0.2.3` source candidate. No tag, GitHub Release, or
+  publication is authorized without explicit owner ship acceptance; a local
+  retained candidate is not publication. The historical `achievements-0.2.2.zip` is immutable
+  pre-PR16 evidence and is not a current install or build artifact.
+- Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; (B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; (C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none.
 - `scripts/build_extension.py --revision HEAD --run-blender` prepares a committed
   Git-blob release source and executes Blender `extension validate`, `extension
   build`, and optional `extension server-generate` with `--factory-startup`.
@@ -36,14 +41,13 @@ Release packaging:
   with a new `<run-id>`. The helper rejects stale ZIP/index entries and never
   deletes an older baseline.
 - The default `reports/extension/` is not a server-gate workspace while older
-  canonical ZIPs are present. Audit a candidate from a fresh
-  output first, then select one exact verified `achievements-0.2.2.zip` and
-  deliberately byte-copy it to the canonical directory. The destination must
-  not already exist; verify identical source/destination SHA-256 and never
-  rebuild or overwrite the canonical ZIP.
-- Treat per-version self-built ZIPs as build evidence only. Use the same exact
-  frozen canonical SHA for install/enable and register/unregister smoke on all
-  three supported Blender versions.
+  canonical ZIPs are present. Audit a 0.2.3 candidate only in a fresh output;
+  do not byte-copy it to a canonical directory, rebuild or overwrite historical
+  artifacts, or use the historical 0.2.2 ZIP as current evidence.
+- Treat per-version self-built ZIPs as build evidence only. A full gate leaves
+  them ephemeral; only separate explicit owner candidate-retention acceptance
+  may preserve one exact audited local-candidate SHA. A separate explicit owner
+  publication acceptance is required for `v0.2.3` and GitHub Release.
 - Packaging tests freeze LF/CRLF behavior, dirty/untracked rejection, exact Git bytes, member allowlists, and repeatable member digests.
 - Static contract tests freeze package-relative intra-extension imports, reject runtime `sys.path` mutation, require the exact manifest `files` permission reason, and reject manifest `network` permission.
 - The immutable `achievements-0.2.1.zip` and `achievements-0.2.0.zip` predecessors are historical evidence; tools must not overwrite or relabel them.

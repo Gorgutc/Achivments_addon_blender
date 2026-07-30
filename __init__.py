@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Achievements",
     "author": "axximus",
-    "version": (0, 2, 2),
+    "version": (0, 2, 3),
     "blender": (5, 0, 0),
     "location": "3D Viewport > Header (trophy icon)",
     "description": "Gamification addon: 105 achievements, XP & levels, rewards, tutorials",
@@ -20,9 +20,12 @@ from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
 
 # ============================================================
-#  ACHIEVEMENTS ADDON — v0.2.2 (release candidate)
+#  ACHIEVEMENTS ADDON — v0.2.3 (unpublished source candidate)
 #  Blender 5.0 / 5.1 / 5.2
 #
+#  v0.2.3:
+#  - New source identity after the historical pre-PR16 0.2.2 ZIP
+#  - No tag, GitHub Release, or canonical artifact without owner ship acceptance
 #  v0.2.2:
 #  - Blender extension namespace policy compliance
 #  - Package-relative runtime imports without sys.path mutation
@@ -1853,7 +1856,7 @@ def register():
     _register_draw_handlers()
     _addon_registered = True
 
-    print("[Achievements] v0.2.2 — registered! (105 achievements + XP)")
+    print("[Achievements] v0.2.3 — registered! (105 achievements + XP)")
     print(f"[Achievements] Data: {DATA_FILE}")
 
 
@@ -1868,7 +1871,7 @@ def unregister():
     ach_lifecycle.unregister_classes(bpy, _classes)
     _unregister_scene_properties()
     _addon_registered = False
-    print("[Achievements] v0.2.2 — unregistered")
+    print("[Achievements] v0.2.3 — unregistered")
 
 
 if __name__ == "__main__":

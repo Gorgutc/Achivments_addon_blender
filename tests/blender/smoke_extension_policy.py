@@ -43,7 +43,7 @@ def installed_probe() -> None:
             "installed module loaded from unexpected directory: "
             f"{module_file.parent} != {EXPECTED_EXTENSION_DIR}"
         )
-    if tuple(module.ach_metadata.ADDON_VERSION) != (0, 2, 2):
+    if tuple(module.ach_metadata.ADDON_VERSION) != (0, 2, 3):
         fail(f"installed version drifted: {module.ach_metadata.ADDON_VERSION!r}")
 
     with (EXPECTED_EXTENSION_DIR / "blender_manifest.toml").open("rb") as handle:

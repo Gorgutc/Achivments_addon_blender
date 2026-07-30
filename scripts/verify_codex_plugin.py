@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -56,6 +57,8 @@ REQUIRED_DOCS = [
     "docs/agent/adrs/0005-active-time-monotonic-window.md",
     "docs/agent/adrs/0006-xp-level-reachability.md",
     "docs/agent/adrs/0007-reward-claim-atomicity.md",
+    "docs/agent/adrs/0008-release-identity-and-ship-acceptance.md",
+    "docs/research/lesson-result-verification.md",
     "docs/superpowers/plans/2026-06-01-achievements-iterative-roadmap.md",
     "docs/handoff/iteration-handoff-template.md",
     "docs/handoff/current.md",
@@ -80,6 +83,117 @@ QUALITY_CI_MIRROR = (
 PACKAGING_FAST_GATE = (
     "Run the fast gate: `verify_frozen`, `verify_codex_plugin`, "
     "`verify_predicates`, `ruff`, and `pytest`."
+)
+CURRENT_RELEASE_IDENTITY = "0.2.3"
+RELEASE_STAGE_POLICY = (
+    "Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; "
+    "(B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; "
+    "(C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none."
+)
+RELEASE_POLICY_MARKERS = (
+    "Release identity: `0.2.3` source candidate.",
+    "No tag, GitHub Release, or publication is authorized without explicit owner ship acceptance; a local retained candidate is not publication.",
+    "The historical `achievements-0.2.2.zip` is immutable pre-PR16 evidence and is not a current install or build artifact.",
+    RELEASE_STAGE_POLICY,
+)
+RELEASE_GUIDANCE_PATHS = (
+    "README.md",
+    "docs/agent/packaging-release.md",
+    "docs/agent/quality-tooling.md",
+    "docs/agent/verification.md",
+    "plugins/achievements-blender-codex/skills/achievements-packaging/SKILL.md",
+    "plugins/achievements-blender-codex/skills/achievements-quality-gate/SKILL.md",
+)
+LESSON_RESEARCH_PATH = "docs/research/lesson-result-verification.md"
+LESSON_RESEARCH_FRONTMATTER = """---
+status: research-draft
+implementation_authorized: false
+owner_approved: false
+threshold_policy: calibration-required
+reward_bridge: disabled
+---
+"""
+LESSON_RESEARCH_HEADINGS = (
+    "Status And Non-Authorization",
+    "Current Frozen Boundaries",
+    "Glossary",
+    "Assessed Unit",
+    "Rubric Schema",
+    "Feature Normalization",
+    "Mandatory Gates And Scoring",
+    "Tolerances And Equivalences",
+    "Explainable Result",
+    "Fixture And Calibration Protocol",
+    "FP/FN Acceptance",
+    "Retry And Anti-Farming",
+    "Versioning And Migration",
+    "Reward Bridge Boundary",
+    "Nine-Lesson Readiness Matrix",
+    "Owner Decisions",
+    "Implementation Entry Gate",
+)
+LESSON_RESEARCH_IDS = (
+    "lesson_vertices_basics",
+    "lesson_edit_basics",
+    "lesson_edges",
+    "lesson_faces",
+    "lesson_modeling",
+    "lesson_materials",
+    "lesson_time_management",
+    "lesson_geo_nodes_intro",
+    "lesson_render_basics",
+)
+LESSON_RESEARCH_ALLOWED_STATES = {
+    "calibration_required",
+    "unsupported_pending_owner_contract",
+}
+LESSON_RESEARCH_RUBRIC_FIELDS = (
+    "rule_id",
+    "feature_kind",
+    "selector",
+    "normalizer",
+    "comparator",
+    "expected",
+    "tolerance_or_exact",
+    "allowed_equivalences",
+    "mandatory",
+    "weight_points",
+    "user_explanation",
+    "fixture_refs",
+)
+LESSON_RESEARCH_OWNER_DECISIONS = (
+    "OD-01: Approve or reject assessed outcomes, lesson URLs, and canonical reference outcomes for each lesson.",
+    "OD-02: Approve the extra-content policy for objects, collections, and external references.",
+    "OD-03: Approve each scope and its closure rules.",
+    "OD-04: Approve selector identity semantics for names, IDs, ordering, and relationships.",
+    "OD-05: Approve any event-only proof contract and its privacy limits.",
+    "OD-06: Approve rule-local tolerances and Blender equivalences.",
+    "OD-07: Approve canonical fixtures, binary `.blend` assets, and license/provenance evidence.",
+    "OD-08: Approve the authoring/review workflow and learner-visible diff detail.",
+    "OD-09: Approve calibration, adversarial fixture coverage, and a nonzero-gap threshold.",
+    "OD-10: Approve independent holdout size, acceptable false-negative rate, and equivalence disposition.",
+    "OD-11: Approve the cross-version Blender support policy.",
+    "OD-12: Approve evidence retention, deletion, privacy policy, and acceptance of the local-tampering limitation.",
+    "OD-13: Approve persistence location and any schema/migration contract.",
+    "OD-14: Approve old-pass behavior, latest/best/current-version presentation, and stale/not_attempted policy.",
+    "OD-15: Approve whether a lesson pass gives XP; the current answer is no.",
+    "OD-16: Approve reward-bridge evidence/claim scope, lesson-to-reward mapping, prospective payload, confirmed Blender action, atomic commit, retry, and anti-abuse policy.",
+)
+RELEASE_AUTHORITY_PATHS = (
+    "AGENTS.md",
+    "README.md",
+    "docs/agent/adrs/0008-release-identity-and-ship-acceptance.md",
+    "docs/agent/architecture.md",
+    "docs/agent/frozen-application-contract.md",
+    "docs/agent/frozen-decisions.md",
+    "docs/agent/packaging-release.md",
+    "docs/agent/quality-tooling.md",
+    "docs/agent/verification.md",
+    "docs/handoff/current.md",
+    "plugins/achievements-blender-codex/skills/achievements-frozen-decisions/SKILL.md",
+    "plugins/achievements-blender-codex/skills/achievements-instruction-drift/SKILL.md",
+    "plugins/achievements-blender-codex/skills/achievements-packaging/SKILL.md",
+    "plugins/achievements-blender-codex/skills/achievements-quality-gate/SKILL.md",
 )
 REQUIRED_HOOKS = [
     ".codex/hooks/session-start.py",
@@ -183,6 +297,386 @@ def markdown_section(text: str, heading: str) -> str:
     return text.split(marker, maxsplit=1)[1].split("\n## ", maxsplit=1)[0].strip()
 
 
+def semantic_clauses(text: str) -> tuple[str, ...]:
+    """Split policy prose at lines, sentences, and semicolons without conflating clauses."""
+    paragraphs: list[str] = []
+    wrapped_lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if wrapped_lines:
+                paragraphs.append(" ".join(wrapped_lines))
+                wrapped_lines = []
+            continue
+        if re.match(r"^(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s|\|)", line):
+            if wrapped_lines:
+                paragraphs.append(" ".join(wrapped_lines))
+            wrapped_lines = [line]
+        else:
+            wrapped_lines.append(line)
+    if wrapped_lines:
+        paragraphs.append(" ".join(wrapped_lines))
+
+    return tuple(
+        clause.strip(" \t,:")
+        for paragraph in paragraphs
+        for clause in re.split(
+            r"[;]+|(?<=[.!?])(?=\s)|\b(?:but|however|therefore|so)\b|"
+            r"(?:,\s*|\band\s+)(?=(?:publish|push|create|install|start|begin|"
+            r"implementation may begin|rewardmanager|passing|(?:a )?lesson url|"
+            r"(?:use|set|apply)\s+\d+(?:\.\d+)?%\s+as\b|threshold\b))",
+            paragraph,
+            flags=re.IGNORECASE,
+        )
+        if clause.strip(" \t,:")
+    )
+
+
+def clause_is_explicitly_safe(clause: str, action: re.Match[str]) -> bool:
+    """A dangerous action needs an in-clause negation or explicit owner gate."""
+    normalized = re.sub(r"\s+", " ", clause).strip()
+    if re.search(
+        r"(?i)\b(?:no longer|not only|not unauthorized|not closed|no publication is prohibited|"
+        r"no owner approval is needed|authorized without owner acceptance|without owner acceptance)\b",
+        normalized,
+    ):
+        return False
+    if re.search(
+        r"(?i)^\s*if stage c is separately approved\b.*\bfuture task may\b.*\b"
+        r"(?:publish|push|create)\b.*\bexact retained candidate\b",
+        normalized,
+    ):
+        return True
+    if re.search(
+        r"(?i)\bonly after\b|\bseparate explicit owner\b|\bfuture owner\b.*\bonly\b|"
+        r"\b(?:requires|pending)\s+(?:separate\s+explicit\s+)?owner acceptance\b",
+        normalized,
+    ):
+        return True
+
+    before = normalized[: action.start()]
+    matched = action.group(0)
+    after = normalized[action.end() :]
+    negation = r"(?:no|never|cannot|can't|must not|do not|does not|is not|are not|prohibited|forbidden|не|нельзя|запрещено)"
+    if re.search(r"(?i)\b(?:no|not|never|cannot|can't|must not|do not|does not|is not|are not|prohibited|forbidden|не|нельзя|запрещено)\b", matched):
+        return True
+    if re.search(r"(?i)\bdid not (?:run|perform|execute)\b", normalized):
+        return True
+    if re.search(rf"(?i)\b{negation}\b(?:\s+\w+){{0,3}}\s*$", before):
+        return True
+    if re.search(r"(?i)\bwithout\b(?:\s+\w+){0,3}\s*$", before):
+        return True
+    if re.search(rf"(?i)^\s*(?:\w+\s+){{0,3}}\b{negation}\b", after):
+        return True
+    negation_tail = re.search(r"(?i)\b(?:no|not|never|cannot|can't|must not|do not|does not|is not|are not|prohibited|forbidden)\b(.*)$", before)
+    if negation_tail and " and " not in negation_tail.group(1).lower():
+        return True
+    return bool(
+        re.search(r"(?i)\b(?:rejected|unvalidated|calibration-only)\b", normalized)
+        and re.search(r"(?i)\bthreshold\b", normalized)
+    )
+
+
+def unsafe_policy_clauses(text: str, dangerous_patterns: tuple[str, ...]) -> list[str]:
+    """Return dangerous policy clauses not independently negated or owner-gated."""
+    return [
+        clause
+        for clause in semantic_clauses(text)
+        if any(
+            not clause_is_explicitly_safe(clause, action)
+            for pattern in dangerous_patterns
+            for action in re.finditer(pattern, clause, re.IGNORECASE)
+        )
+    ]
+
+
+RELEASE_DANGEROUS_PATTERNS = (
+    r"\bstage a\b(?:(?!\bstage b\b).)*\b(?:retain(?:s|ed|ing)?|preserv(?:e|es|ed|ing)|cop(?:y|ies|ied|ying)|canonicali[sz](?:e|es|ed|ing))\b",
+    r"\bfull validation gate\b.*\b(?:retain(?:s|ed|ing)?|preserv(?:e|es|ed|ing)|cop(?:y|ies|ied|ying)|canonicali[sz](?:e|es|ed|ing))\b",
+    r"\b(?:push|publish)(?:es|ed|ing)?\b(?!\s+to\s+`?main`?)",
+    r"\b(?:create|make)\b.*\b(?:v?0\.2\.3\s+)?tag\b",
+    r"\b(?:create|make)\b.*\bgithub release\b",
+    r"\b(?:tag|github release|publication|stage c)\b.*\bauthorized\b",
+    r"\bowner approved publication\b",
+    r"\bowner has approved publication\b",
+    r"\bpublication was approved by the owner\b",
+    r"\bpublication is not unauthorized\b",
+    r"\bno publication is prohibited\b",
+    r"\btag creation\b",
+    r"\b(?:install|use|release)\b.*\bachievements-0\.2\.2\.zip\b",
+    r"\bachievements-0\.2\.2\.zip\b.*\b(?:current|release|artifact)\b",
+    r"\b0\.2\.3\s+zip\b.*\b(?:current|canonical)\b",
+)
+
+
+RESEARCH_DANGEROUS_PATTERNS = (
+    r"\bowner approved (?:this )?implementation\b",
+    r"\bthe owner has approved implementation\b",
+    r"\bthis implementation was approved by the owner\b",
+    r"\bno owner approval is needed\b",
+    r"\bowner approval (?:is )?(?:complete|granted)\b",
+    r"\b(?:start|begin) implementation(?: now)?\b",
+    r"\bimplementation\b.*\b(?:authorized|ready|may begin)\b",
+    r"\bimplementation is not unauthorized\b",
+    r"\bentry gate\b.*\b(?:open|no longer closed|not closed)\b",
+    r"\b(?:use|set|apply)\s+\d+(?:\.\d+)?%\s+as (?:the )?threshold\b",
+    r"\bthreshold(?:_basis_points)?\s*(?:is|=|:)\s*(?!null\b)\d+(?:\.\d+)?%?\b",
+    r"\b(?:an )?approved threshold(?: of)?\s+\d+(?:\.\d+)?%\s+applies\b",
+    r"\b(?:approved|default)\s+threshold\b.*\d+(?:\.\d+)?%\b",
+    r"\brewardmanager\b.*\binvoked\b",
+    r"\breward bridge\b.*\benabled\b",
+    r"\blesson persistence\b.*\b(?:authorized|enabled)\b",
+    r"\b(?:xp|reward) writes?\b.*\b(?:enabled|authorized)\b",
+    r"\b(?:may|can|will|is authorized to) write `?rewards_claimed`?\b",
+    r"\b(?:passing|pass(?:ing)? assessment|passing (?:the )?lesson|a pass)\b.*\b(?:grants?|awards?|writes?|persists?|creates?)\b.*\b(?:xp|reward|claim|persistence)\b",
+    r"\blesson url proves completion\b",
+)
+
+
+def release_guidance_errors(guidance: dict[str, str]) -> list[str]:
+    """Reject stale current-artifact wording and missing ship-acceptance guards."""
+    errors: list[str] = []
+    for relative_path in RELEASE_GUIDANCE_PATHS:
+        text = guidance.get(relative_path, "")
+        normalized = re.sub(r"\s+", " ", text)
+        missing = [marker for marker in RELEASE_POLICY_MARKERS if marker not in normalized]
+        if missing:
+            errors.append(f"{relative_path} missing release-policy marker")
+        if "reports/extension/achievements-0.2.2.zip" in text:
+            errors.append(f"{relative_path} presents the historical 0.2.2 ZIP as current")
+        if re.search(r"\b(?:frozen|current)\s+canonical\s+(?:SHA|ZIP)\b", text, re.IGNORECASE):
+            errors.append(f"{relative_path} presents a canonical artifact as the current candidate")
+        if re.search(
+            r"\bfull\s+(?:validation\s+)?gate\b(?![^.\n]{0,100}\bowner\b)"
+            r"[^.\n]{0,100}\b(?:may|can|will)\s+(?:retain|preserve)\b",
+            text,
+            re.IGNORECASE,
+        ):
+            errors.append(f"{relative_path} lets a full gate retain a candidate without owner acceptance")
+    return errors
+
+
+def active_release_guidance() -> dict[str, str]:
+    return {
+        relative_path: (ROOT / relative_path).read_text(encoding="utf-8")
+        for relative_path in RELEASE_GUIDANCE_PATHS
+        if (ROOT / relative_path).is_file()
+    }
+
+
+def release_authority_errors(authorities: dict[str, str]) -> list[str]:
+    """Reject additive publication authority across every active release surface."""
+    errors: list[str] = []
+    for relative_path in RELEASE_AUTHORITY_PATHS:
+        text = authorities.get(relative_path, "")
+        if not text:
+            errors.append(f"{relative_path} is missing release authority guidance")
+            continue
+        if unsafe_policy_clauses(text, RELEASE_DANGEROUS_PATTERNS):
+            errors.append(f"{relative_path} contains an additive release action without an in-clause denial or owner gate")
+    return errors
+
+
+def active_release_authorities() -> dict[str, str]:
+    return {
+        relative_path: (ROOT / relative_path).read_text(encoding="utf-8")
+        for relative_path in RELEASE_AUTHORITY_PATHS
+        if (ROOT / relative_path).is_file()
+    }
+
+
+def release_version_parity_errors() -> list[str]:
+    """Fail closed unless every active version surface names the source candidate."""
+    errors: list[str] = []
+    expected_tuple = tuple(int(part) for part in CURRENT_RELEASE_IDENTITY.split("."))
+
+    try:
+        root_tree = ast.parse((ROOT / "__init__.py").read_text(encoding="utf-8"))
+        root_infos = [
+            ast.literal_eval(node.value)
+            for node in root_tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "bl_info" for target in node.targets)
+        ]
+        if len(root_infos) != 1 or root_infos[0].get("version") != expected_tuple:
+            errors.append("root bl_info version differs from the release identity")
+    except (OSError, SyntaxError, ValueError):
+        errors.append("root bl_info version differs from the release identity")
+
+    try:
+        metadata_tree = ast.parse((ROOT / "achievements" / "metadata.py").read_text(encoding="utf-8"))
+        metadata_versions = [
+            ast.literal_eval(node.value)
+            for node in metadata_tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "ADDON_VERSION" for target in node.targets)
+        ]
+        if metadata_versions != [expected_tuple]:
+            errors.append("achievements metadata version differs from the release identity")
+    except (OSError, SyntaxError, ValueError):
+        errors.append("achievements metadata version differs from the release identity")
+
+    try:
+        manifest = tomllib.loads((ROOT / "blender_manifest.toml").read_text(encoding="utf-8"))
+        if manifest.get("version") != CURRENT_RELEASE_IDENTITY:
+            errors.append("extension manifest version differs from the release identity")
+    except (OSError, tomllib.TOMLDecodeError):
+        errors.append("extension manifest version differs from the release identity")
+
+    try:
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        if project.get("project", {}).get("version") != CURRENT_RELEASE_IDENTITY:
+            errors.append("pyproject version differs from the release identity")
+    except (OSError, tomllib.TOMLDecodeError):
+        errors.append("pyproject version differs from the release identity")
+
+    try:
+        lock_data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+        packages = lock_data.get("package", [])
+        if not isinstance(packages, list) or not all(isinstance(package, dict) for package in packages):
+            raise TypeError("uv.lock package entries must be tables")
+        root_packages = [
+            package for package in packages if package.get("name") == "achievements-blender-codex-infra"
+        ]
+        if len(root_packages) != 1 or root_packages[0].get("version") != CURRENT_RELEASE_IDENTITY:
+            errors.append("uv.lock root package version differs from the release identity")
+    except (OSError, tomllib.TOMLDecodeError, TypeError, AttributeError):
+        errors.append("uv.lock root package version differs from the release identity")
+
+    try:
+        smoke_tree = ast.parse(
+            (ROOT / "tests" / "blender" / "smoke_extension_policy.py").read_text(encoding="utf-8")
+        )
+        smoke_versions = [
+            ast.literal_eval(node.comparators[0])
+            for node in ast.walk(smoke_tree)
+            if isinstance(node, ast.Compare)
+            and len(node.ops) == 1
+            and isinstance(node.ops[0], ast.NotEq)
+            and len(node.comparators) == 1
+            and isinstance(node.left, ast.Call)
+            and isinstance(node.left.func, ast.Name)
+            and node.left.func.id == "tuple"
+            and len(node.left.args) == 1
+            and isinstance(node.left.args[0], ast.Attribute)
+            and node.left.args[0].attr == "ADDON_VERSION"
+        ]
+        if smoke_versions != [expected_tuple]:
+            errors.append("Blender smoke extension-policy version differs from the release identity")
+    except (OSError, SyntaxError, ValueError):
+        errors.append("Blender smoke extension-policy version differs from the release identity")
+    return errors
+
+
+def lesson_result_verification_errors(text: str) -> list[str]:
+    """Keep the lesson-result document a closed research draft until owner approval."""
+    errors: list[str] = []
+    if not text.startswith(LESSON_RESEARCH_FRONTMATTER):
+        errors.append("research draft frontmatter must be exact and closed")
+
+    headings = re.findall(r"^## (.+)$", text, flags=re.MULTILINE)
+    if tuple(headings) != LESSON_RESEARCH_HEADINGS:
+        errors.append("research draft H2 headings must be exact, unique, and ordered")
+
+    matrix = markdown_section(text, "Nine-Lesson Readiness Matrix")
+    rows = re.findall(r"^\|\s*`(lesson_[a-z_]+)`\s*\|\s*`([a-z_]+)`\s*\|", matrix, re.MULTILINE)
+    row_ids = [lesson_id for lesson_id, _state in rows]
+    row_states = [state for _lesson_id, state in rows]
+    if row_ids != list(LESSON_RESEARCH_IDS):
+        errors.append("research matrix must contain each current lesson id exactly once and in catalog order")
+    if len(row_states) != len(LESSON_RESEARCH_IDS) or set(row_states) - LESSON_RESEARCH_ALLOWED_STATES:
+        errors.append("research matrix may use only closed readiness states")
+
+    required_markers = (
+        "Submit result",
+        "URL, elapsed time, or viewing history is not proof",
+        "immutable local `attempt_id`",
+        "extractor_version",
+        "candidate_digest",
+        "It is not an attempt id and does not include `extractor_version`.",
+        "lesson_id + assessment_version + rubric_digest + extractor_version + candidate_digest",
+        "identifies deterministic evaluation reuse, not a submitted attempt",
+        "reuses the deterministic evaluation and never grants a new claim, XP, or reward",
+        "active_object`, `selected_objects`, `assessment_collection`, and `scene`",
+        "explicit closure",
+        "Outcome",
+        "Process",
+        "deterministic JSON",
+        "canonical Blender units",
+        "normalized quaternion",
+        "finite floats",
+        "unsupported Blender-version semantics produce `indeterminate`",
+        "explicit Blender equivalence",
+        "Mandatory gates have weight 0.",
+        "sum is exactly 1000",
+        "no N/A, and no dynamic denominator",
+        "passed_weight",
+        "denominator = 1000",
+        "passed_weight * 10000 >= threshold_basis_points * 1000",
+        "half-up rounding to `0.1%`",
+        "A missing feature fails",
+        "threshold_basis_points: null",
+        "rejected/unvalidated hypothesis, never a default or approved threshold",
+        "max_negative_score < min_positive_score",
+        "nonzero integer gap",
+        "tests/fixtures/lesson_assessment/<lesson_id>/<assessment_version>/",
+        "No silent edit, recalculation, migration, or backfill",
+        "conceptual immutable attempt results keyed by `attempt_id`",
+        "last completed current-version result",
+        "maximum exact ratio among mandatory-pass results",
+        "indeterminate result does not replace best",
+        "historical and leaves current status stale/not_attempted",
+        "Passing assessment yields evidence only",
+        "No lesson persistence is authorized.",
+        "entry gate is closed",
+        "0.2.3",
+        "schema `1.0.0`",
+        "XP awards `5/10/20`",
+        "cap `1550`",
+        "files-only permission",
+        "disabled production networking",
+    )
+    missing = [marker for marker in required_markers if marker not in text]
+    if missing:
+        errors.append(f"research draft missing boundary markers: {', '.join(missing)}")
+
+    rubric_section = markdown_section(text, "Rubric Schema")
+    rubric_fences = re.findall(r"```text\n(.*?)\n```", rubric_section, flags=re.DOTALL)
+    rubric_fields = tuple(rubric_fences[0].splitlines()) if len(rubric_fences) == 1 else ()
+    if rubric_fields != LESSON_RESEARCH_RUBRIC_FIELDS:
+        errors.append("research rubric fields must be the exact ordered unique schema")
+
+    threshold_values = re.findall(r"(?m)^threshold_basis_points:[ \t]*([^\r\n]+?)[ \t]*\r?$", text)
+    if threshold_values != ["null"]:
+        errors.append("research threshold must remain null until calibration")
+    if unsafe_policy_clauses(text, RESEARCH_DANGEROUS_PATTERNS) or re.search(
+        r"(?im)^owner_approved:\s*true\b", text
+    ):
+        errors.append("research draft contains an additive implementation, threshold, or reward authorization")
+
+    deny_markers = (
+        "must not write `rewards_claimed`",
+        "bypass unlock hashes",
+        "change XP `5/10/20` or cap `1550`",
+        "treat a URL as completion",
+        "invoke `RewardManager`",
+        "no telemetry, authentication, network, account",
+    )
+    denied = [marker for marker in deny_markers if marker not in text]
+    if denied:
+        errors.append(f"research draft must retain deny boundaries: {', '.join(denied)}")
+
+    owner_decisions = markdown_section(text, "Owner Decisions")
+    owner_lines = tuple(re.findall(r"^- (OD-\d{2}: .+)$", owner_decisions, flags=re.MULTILINE))
+    if owner_lines != LESSON_RESEARCH_OWNER_DECISIONS:
+        errors.append("research draft must preserve the exact ordered owner decisions")
+    if re.search(r"(?im)^\s*(?:status|readiness_state)\s*:\s*(?:complete|ready)\b", text):
+        errors.append("research draft must not declare an actual complete or ready state")
+    if re.search(r"(?m)^\|\s*`lesson_[a-z_]+`\s*\|\s*`ready`\s*\|", matrix):
+        errors.append("research matrix must not declare a ready state")
+    return errors
+
+
 def current_handoff_atomicity_errors(text: str) -> list[str]:
     errors: list[str] = []
     expected_headings = [
@@ -210,6 +704,10 @@ def current_handoff_atomicity_errors(text: str) -> list[str]:
             "canonical, retained, or published extension artifact was produced."
         ),
         "ADR 0007",
+        "ADR 0008",
+        "0.2.3",
+        "explicit owner ship acceptance",
+        "historical `achievements-0.2.2.zip`",
         "prospective claim",
         "idempotent",
         PREDICATE_COMMAND,
@@ -219,48 +717,31 @@ def current_handoff_atomicity_errors(text: str) -> list[str]:
         errors.append(f"missing markers: {', '.join(missing)}")
 
     blockers = markdown_section(text, "Blockers")
-    expected_blockers = (
-        "None for the merged source slice. PR #17 merged exact head "
-        "`213babb6e29e023617a66600e4b9d8375ea466d9` into `main` as "
-        "`396dda957908b26c94d73387bcddf14712a4c23c` after Fast Gate and "
-        "Blender 5.0.1 / 5.1.2 / 5.2.0 succeeded. CI created and removed "
-        "disposable per-job ZIP/install state; no tag, GitHub Release, version "
-        "bump, production asset addition, canonical/retained/published extension "
-        "artifact, or real "
-        "`~/BlenderAchievements` access was performed."
-    )
-    if blockers != expected_blockers:
-        errors.append("Blockers must preserve exact merged-source and no-release facts")
+    for marker in (
+        "No technical blocker prevents source-candidate work.",
+        "separate explicit owner publication acceptance",
+        "No production asset addition",
+        "`~/BlenderAchievements` access is authorized",
+    ):
+        if marker not in blockers:
+            errors.append("Blockers must preserve the source-candidate and no-ship boundary")
+            break
 
     next_start = markdown_section(text, "Next Start Prompt")
-    expected_next_start = (
-        "Verify current `main` contains PR #17 head "
-        "`213babb6e29e023617a66600e4b9d8375ea466d9`, merge "
-        "`396dda957908b26c94d73387bcddf14712a4c23c`, and this containing "
-        "handoff closeout before continuing. Do not redo reward claim atomicity. "
-        "Take one separate task at a time; the recommended next task is a "
-        "research-only specification for tutorial result verification and a "
-        "defensible 90% threshold. Keep real `~/BlenderAchievements` untouched; "
-        "any tag, GitHub Release, version bump, production asset publication, or "
-        "cloud/auth change requires separate owner authorization."
-    )
-    if next_start != expected_next_start:
-        errors.append("Next Start Prompt must preserve the exact continuation boundary")
-
-    authorization_scan = text
-    for allowed_statement in (
-        expected_blockers,
-        expected_next_start,
-        (
-            "- Predicate semantics, deeper fixtures, UI/GPU/handler decomposition, "
-            "production cloud, release versioning, tag, and GitHub Release remain "
-            "separate decisions."
-        ),
+    for marker in (
+        "lesson-assessment specification remains a separate research-only slice",
+        "explicit owner authorization",
+        "canonical artifact",
     ):
-        authorization_scan = authorization_scan.replace(allowed_statement, "")
+        if marker not in next_start:
+            errors.append("Next Start Prompt must preserve the exact continuation boundary")
+            break
+
     if re.search(
-        r"\b(?:push|publish|publication|release|tag)\b",
-        authorization_scan,
+        r"(?:push|publish|tag|GitHub Release)(?![^.\n]{0,80}\b(?:are|is) authorized\s+without\b)"
+        r"[^.\n]{0,80}\b(?:are|is) authorized\b|"
+        r"Publish this branch|Create a tag and GitHub Release|You may push this branch",
+        text,
         flags=re.IGNORECASE,
     ):
         errors.append("unexpected publication directive or statement detected")
@@ -453,6 +934,27 @@ def verify_docs() -> None:
         "release guidance includes predicate verifier",
         PACKAGING_FAST_GATE in packaging_text,
     )
+    release_errors = release_guidance_errors(active_release_guidance())
+    record(
+        "active release guidance is identity-safe and ship-acceptance-gated",
+        not release_errors,
+        "; ".join(release_errors),
+    )
+    authority_errors = release_authority_errors(active_release_authorities())
+    record(
+        "active release authorities reject additive release permission",
+        not authority_errors,
+        "; ".join(authority_errors),
+    )
+
+    research_path = ROOT / LESSON_RESEARCH_PATH
+    research_text = research_path.read_text(encoding="utf-8") if research_path.is_file() else ""
+    research_errors = lesson_result_verification_errors(research_text)
+    record(
+        "lesson-result verification remains a closed research draft",
+        research_path.is_file() and not research_errors,
+        "; ".join(research_errors),
+    )
 
     current_handoff = ROOT / "docs" / "handoff" / "current.md"
     current_text = (
@@ -503,7 +1005,10 @@ def verify_extension_contract() -> None:
     record("GPL-3.0-or-later license exists: LICENSE", license_file.is_file())
     if manifest.is_file():
         manifest_data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-        record("extension version is 0.2.2", manifest_data.get("version") == "0.2.2")
+        record(
+            "extension version is 0.2.3 source candidate",
+            manifest_data.get("version") == CURRENT_RELEASE_IDENTITY,
+        )
         record("extension minimum Blender is 5.0.0", manifest_data.get("blender_version_min") == "5.0.0")
         record(
             "extension manifest declares GPL-3.0-or-later",
@@ -519,6 +1024,12 @@ def verify_extension_contract() -> None:
             "extension manifest declares no network permission",
             isinstance(permissions, dict) and "network" not in permissions,
         )
+    version_parity_errors = release_version_parity_errors()
+    record(
+        "active release version surfaces are exact and synchronized",
+        not version_parity_errors,
+        ", ".join(version_parity_errors),
+    )
     if release_builder.is_file():
         builder_text = release_builder.read_text(encoding="utf-8")
         record("release builder supports committed revision mode", "--revision" in builder_text)

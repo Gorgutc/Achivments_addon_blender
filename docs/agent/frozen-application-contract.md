@@ -12,6 +12,7 @@ This document freezes the active behavior of the Achievements Blender add-on. Fu
 - Extension loader and manifest permission decision: ADR 0004.
 - Active-time accounting decision: ADR 0005.
 - Reward claim atomicity decision: ADR 0007.
+- Release identity and ship-acceptance decision: ADR 0008.
 - Retired duplicate: `achievements_v01 (4).py` is intentionally absent; ADR 0002 preserves exact Git recovery evidence.
 - Stale reference file: `docs/archive/achievements_100_list.md` preserves an older 100-achievement design byte-for-byte and is not the current source of truth.
 - README is useful orientation but the executable contract is the add-on code, `achievements/catalog.py`, and this frozen contract.
@@ -21,7 +22,7 @@ This document freezes the active behavior of the Achievements Blender add-on. Fu
 
 - Add-on name: `Achievements`.
 - Author: `axximus`.
-- Version: `(0, 2, 2)`.
+- Source-candidate version: `(0, 2, 3)`; this is not a tag, GitHub Release, or published artifact.
 - Minimum `bl_info["blender"]`: `(5, 0, 0)`.
 - Location: `3D Viewport > Header (trophy icon)`.
 - Category: `Interface`.

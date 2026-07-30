@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -40,6 +41,9 @@ EXTENSION_SUCCESS_MARKERS = {
     "server-generate": ("found 1 packages.",),
 }
 DEFAULT_EXTENSION_TIMEOUT_SECONDS = 180
+CURRENT_RELEASE_IDENTITY = "0.2.3"
+RESERVED_HISTORICAL_IDENTITY = "0.2.2"
+CURRENT_PAYLOAD_MEMBER_COUNT = 23
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +237,36 @@ def _working_tree_bytes(root: Path, relative_path: Path) -> bytes:
 
 def _git_blob_bytes(root: Path, revision: str, relative_path: Path) -> bytes:
     return _run_git(root, "cat-file", "blob", f"{revision}:{relative_path.as_posix()}")
+
+
+def release_identity_errors(
+    root: Path = ROOT,
+    *,
+    revision: str | None = None,
+) -> list[str]:
+    """Return fail-closed errors for a Blender-spawnable release candidate."""
+    manifest_bytes = (
+        _working_tree_bytes(root, Path("blender_manifest.toml"))
+        if revision is None
+        else _git_blob_bytes(root, revision, Path("blender_manifest.toml"))
+    )
+    manifest = tomllib.loads(manifest_bytes.decode("utf-8"))
+    payload = release_payload_paths(root, revision=revision)
+    errors: list[str] = []
+    version = manifest.get("version")
+    if version == RESERVED_HISTORICAL_IDENTITY:
+        errors.append(
+            "reserved historical identity 0.2.2 cannot launch Blender extension commands"
+        )
+    if version != CURRENT_RELEASE_IDENTITY:
+        errors.append(f"expected release identity {CURRENT_RELEASE_IDENTITY}, got {version!r}")
+    if Path("achievements/levels.py") not in payload:
+        errors.append("current release payload must include achievements/levels.py")
+    if len(payload) != CURRENT_PAYLOAD_MEMBER_COUNT:
+        errors.append(
+            f"expected {CURRENT_PAYLOAD_MEMBER_COUNT} release payload members, got {len(payload)}"
+        )
+    return errors
 
 
 def _source_tree_paths(source_dir: Path) -> tuple[Path, ...]:
@@ -602,6 +636,17 @@ def main() -> int:
 
     source_dir = args.source_dir.resolve()
     output_dir = args.output_dir.resolve()
+    try:
+        identity_errors = release_identity_errors(ROOT, revision=args.revision)
+    except (OSError, ValueError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        print(f"[extension-cli:FAIL] release identity guard: {exc}", file=sys.stderr)
+        return 1
+    if identity_errors:
+        print(
+            f"[extension-cli:FAIL] release identity guard: {'; '.join(identity_errors)}",
+            file=sys.stderr,
+        )
+        return 1
     blender = args.blender.resolve() if args.blender else find_blender_path()
     output_dir.mkdir(parents=True, exist_ok=True)
 

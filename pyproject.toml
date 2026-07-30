@@ -1,6 +1,6 @@
 [project]
 name = "achievements-blender-codex-infra"
-version = "0.2.2"
+version = "0.2.3"
 description = "Repo-local Codex infrastructure for the Blender Achievements add-on."
 requires-python = ">=3.11"
 dependencies = []

@@ -14,7 +14,7 @@ Frozen after the approved Achievements 0.2.1 maintenance slice:
 - Treat `subsurface_skin` as exact active Principled Subsurface Weight and `denoiser_render` as a completed Cycles-render event predicate, not passive configuration state.
 
 Frozen after the approved Achievements 0.2.2 policy closeout:
-- Require `bl_info["blender"] == (5, 0, 0)` and current add-on version `0.2.2`.
+- Require `bl_info["blender"] == (5, 0, 0)`; ADR 0008 supersedes only the active source identity.
 - Keep root-to-support-module imports package-relative inside `bl_ext.<repository>.achievements`; shipped runtime code must not add the extension directory to `sys.path` or depend on a top-level `achievements` alias.
 - Require exactly `files = "Store progress and load local reward assets"` under manifest `[permissions]`; do not request `network` permission while production networking remains disabled.
 - Preserve the 0.2.1 extension-removal, Subsurface Weight, and completed-render behavior without content, predicate, UI, persistence, reward, or cloud expansion.
@@ -35,7 +35,12 @@ Frozen after the 2026-07-29 reward claim atomicity decision in ADR 0007:
 - Preserve the read-only `RewardResult.mark_claimed` compatibility alias while `claim_after_apply` names the internal timing contract.
 - Build the first claim prospectively without mutating runtime state; after a save failure, recover the marked Material, MESH Object, or GeometryNodeTree witness and retry persistence without duplication.
 - Roll back newly loaded/created Blender ID deltas, partial modifiers, failed material-slot changes, and shared owners' active slot indices when application is not confirmed. Preserve Blender-supported non-mesh geo-node targets and require an actual `NODES` modifier plus assigned GeometryNodeTree rather than assuming success.
-- Preserve already-claimed explicit reapply, JSON schema `1.0.0`, the exact payload keys, version `0.2.2`, reward catalog/assets, and files-only extension policy. Recovery markers are idempotency metadata, not authentication.
+- Preserve already-claimed explicit reapply, JSON schema `1.0.0`, the exact payload keys, reward catalog/assets, and files-only extension policy. Recovery markers are idempotency metadata, not authentication.
+
+Frozen after the owner-approved 2026-07-30 release-identity decision in ADR 0008:
+- Current source identity is `0.2.3`; it is an unpublished source candidate. Stage A full validation outputs are ephemeral and authorize no retention, canonical artifact, or publication. Stage B needs separate explicit owner candidate-retention acceptance for one exact audited local candidate SHA, still non-canonical and not publication. Stage C needs separate explicit owner publication acceptance for `v0.2.3` and GitHub Release from that exact retained candidate; this session grants none.
+- Historical `achievements-0.2.2.zip` is immutable pre-PR16 evidence and must not be rebuilt, overwritten, relabeled, or used as a current install/build artifact.
+- Preserve catalog IDs, behavior, schema, persistence, assets, local progress, package allowlist, files-only permission, and disabled networking. Explicit owner ship acceptance remains required before any public release action.
 
 Default future-change rule:
 - Change only the named behavior, function, data field, or UI surface requested by the user.

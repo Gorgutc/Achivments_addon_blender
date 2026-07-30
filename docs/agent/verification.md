@@ -1,5 +1,12 @@
 # Verification
 
+## Release Identity And Ship Authorization
+
+Release identity: `0.2.3` source candidate.
+No tag, GitHub Release, or publication is authorized without explicit owner ship acceptance; a local retained candidate is not publication.
+The historical `achievements-0.2.2.zip` is immutable pre-PR16 evidence and is not a current install or build artifact.
+Release stages: (A) a full validation gate produces only ephemeral outputs and authorizes no retention, canonical artifact, or publication; (B) only separate explicit owner candidate-retention acceptance may preserve one exact audited local candidate SHA, which remains non-canonical and not publication; (C) only separate explicit owner publication acceptance may create `v0.2.3` tag and GitHub Release from that exact retained candidate. This session grants none.
+
 Fast gate:
 - `uv run python scripts/verify_frozen.py`
 - `uv run python scripts/verify_codex_plugin.py`
@@ -44,17 +51,14 @@ Release packaging gate:
   staged `source/` before execution. The helper rejects stale ZIP/index entries
   and never deletes an older baseline implicitly.
 - `reports/extension/` is unsuitable for a server gate while older canonical ZIPs
-  are present. After all version-specific build gates pass, select one exact
-  verified `achievements-0.2.2.zip`, freeze its SHA-256/member digests, and
-  deliberately byte-copy it from a fresh output to
-  `reports/extension/achievements-0.2.2.zip`. The destination must not already
-  exist; confirm identical source/destination SHA-256. Never rebuild or
-  overwrite the canonical ZIP, implicitly clean the canonical directory, or
-  replace the immutable 0.2.1 or 0.2.0 predecessors.
-- Per-version self-built ZIPs are build evidence only. Run install/enable and
-  register/unregister smoke on Blender 5.0.1, 5.1.2, and 5.2.0 against the same
-  exact frozen canonical SHA.
-- Inspect `reports/extension/achievements-0.2.2.zip`: only manifest, `LICENSE`, root runtime, and `achievements/` are allowed. Confirm Git-byte equality, no symlink/traversal/duplicate entries, member digests, final SHA-256, and size.
+  are present. Keep every 0.2.3 validation ZIP in its fresh output; audit its
+  allowlist, Git-byte equality, no symlink/traversal/duplicate entries, member
+  digests, SHA-256, and size. Do not copy it to a canonical path or use the
+  historical 0.2.2 ZIP as a current artifact.
+- Per-version self-built ZIPs are build evidence only. A full gate leaves them
+  ephemeral; only separate explicit owner candidate-retention acceptance may
+  preserve one exact audited local-candidate SHA. A separate explicit owner
+  publication acceptance is required for a `v0.2.3` tag and GitHub Release.
 
 Static verifier rules:
 - Parse add-on source with `ast`; do not import `bpy`.
@@ -65,7 +69,7 @@ Static verifier rules:
 - Recompute catalog maximum XP, require all ten starts and the complete `0..1550` five-point state space to be reachable, and enforce no legacy downlevel with maximum promotion `+3`.
 - Validate strict catalog `(complex_id, step_check)` to predicate-registry bijection.
 - Require `achievements_v01 (4).py` to be absent and preserve its recovery evidence in ADR 0002.
-- Validate version `0.2.2`, Blender minimum `(5, 0, 0)`, and 105-achievement active text.
+- Validate source-candidate version `0.2.3`, Blender minimum `(5, 0, 0)`, 105-achievement active text, and fail-closed release-guidance markers.
 - Validate package-relative root-to-support-module imports and reject shipped runtime imports through a top-level `achievements` alias.
 - Reject shipped runtime access to or mutation of `sys.path`.
 - Require `[permissions].files = "Store progress and load local reward assets"` in `blender_manifest.toml` and reject a manifest `network` permission.
