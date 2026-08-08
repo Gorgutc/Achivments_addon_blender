@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Frozen Decisions
+  short_description: Check preparation-phase boundaries.
+  default_prompt: Use $achievements-frozen-decisions before edits that could change source truth.

@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Context Keeper
+  short_description: Preserve frozen repository facts across work.
+  default_prompt: Use $achievements-context-keeper when summarizing or resuming.

@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Bootstrap
+  short_description: Load local Blender add-on context and repository rules.
+  default_prompt: Use $achievements-bootstrap before substantial work in this repository.

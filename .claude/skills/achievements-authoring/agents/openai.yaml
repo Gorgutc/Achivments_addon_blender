@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Authoring
+  short_description: Add a catalog achievement and its frozen chain.
+  default_prompt: Use $achievements-authoring before adding or extending an achievement.
