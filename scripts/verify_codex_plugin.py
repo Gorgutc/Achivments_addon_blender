@@ -15,6 +15,7 @@ SKILL_ROOT = PLUGIN_ROOT / "skills"
 REQUIRED_SKILLS = [
     "achievements-bootstrap",
     "achievements-addon-rules",
+    "achievements-authoring",
     "achievements-audit-orchestrator",
     "achievements-context-keeper",
     "achievements-frozen-decisions",

@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Data Persistence
+  short_description: Protect progress JSON and user data.
+  default_prompt: Use $achievements-data-persistence for persistence work.

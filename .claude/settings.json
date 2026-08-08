@@ -1,0 +1,40 @@
+{
+  "$comment": "Hand-authored Claude Code wiring. It mirrors .codex/hooks.json event-by-event and must reference the SAME .codex/hooks/*.py scripts; node tools/sync-harness.mjs --check enforces that parity. The generated parts of this directory are .claude/skills and .claude/agents - never edit those by hand.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PROJECT_DIR}/.codex/hooks/session-start.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PROJECT_DIR}/.codex/hooks/user-prompt-nudge.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python \"${CLAUDE_PROJECT_DIR}/.codex/hooks/post-edit-static.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

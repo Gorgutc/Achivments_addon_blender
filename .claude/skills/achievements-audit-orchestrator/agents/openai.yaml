@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Audit Orchestrator
+  short_description: Coordinate explicit subagent audits.
+  default_prompt: Use $achievements-audit-orchestrator for multi-agent repository audits.

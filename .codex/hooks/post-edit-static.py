@@ -12,7 +12,8 @@ COMMANDS = [
 
 
 def main() -> int:
-    failed = 0
+    outputs: list[str] = []
+    failed: list[str] = []
     for command in COMMANDS:
         result = subprocess.run(
             command,
@@ -22,10 +23,22 @@ def main() -> int:
             stderr=subprocess.STDOUT,
             check=False,
         )
-        print(result.stdout)
+        outputs.append(result.stdout)
         if result.returncode != 0:
-            failed += 1
-    return 1 if failed else 0
+            failed.append(" ".join(command[1:]))
+    if failed:
+        # Blocking convention shared by both harnesses: diagnostics on stderr
+        # plus exit 2. Claude Code feeds a hook's stderr back to the model only
+        # on exit 2 - stdout with exit 1 is invisible to it - and the Codex
+        # hooks block the same way.
+        for output in outputs:
+            sys.stderr.write(output)
+        sys.stderr.write(f"post-edit-static: FAIL - {', '.join(failed)}\n")
+        sys.stderr.write("Fix the regression or revert the edit before continuing.\n")
+        return 2
+    for output in outputs:
+        print(output)
+    return 0
 
 
 if __name__ == "__main__":

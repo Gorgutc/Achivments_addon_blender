@@ -15,6 +15,7 @@ find_blender = "uv run python scripts/find_blender.py"
 blender_smoke_register = "uv run python scripts/run_blender_smoke.py --suite register"
 ruff = "uv run ruff check ."
 pytest = "uv run pytest"
+package = "uv run python scripts/build_extension.py"
 
 [policy]
 preparation_tasks_may_edit_addon_code = false

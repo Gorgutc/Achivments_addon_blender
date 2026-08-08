@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Instruction Drift
+  short_description: Audit active instruction consistency.
+  default_prompt: Use $achievements-instruction-drift when editing repo instructions.

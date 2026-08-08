@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Blender Runtime
+  short_description: Run Blender checks safely.
+  default_prompt: Use $achievements-blender-runtime when running Blender.

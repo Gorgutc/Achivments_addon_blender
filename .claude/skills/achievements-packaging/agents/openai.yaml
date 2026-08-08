@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Packaging
+  short_description: Plan Blender packaging and release checks.
+  default_prompt: Use $achievements-packaging for release and packaging work.

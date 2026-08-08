@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Registration Lifecycle
+  short_description: Review Blender registration cleanup.
+  default_prompt: Use $achievements-registration-lifecycle for lifecycle work.

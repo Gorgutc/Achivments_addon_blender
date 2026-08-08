@@ -1,0 +1,4 @@
+interface:
+  display_name: Achievements Add-on Rules
+  short_description: Apply Blender/Python add-on constraints.
+  default_prompt: Use $achievements-addon-rules before editing add-on behavior.

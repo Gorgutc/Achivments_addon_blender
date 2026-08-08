@@ -1,0 +1,21 @@
+{
+  "name": "Achivments_addon_blender",
+  "verify": {
+    "fast": "uv run python scripts/verify_frozen.py && uv run python scripts/verify_codex_plugin.py && uv run python scripts/verify_predicates.py && uv run ruff check .",
+    "ship": "uv run python scripts/verify_frozen.py && uv run python scripts/verify_codex_plugin.py && uv run python scripts/verify_predicates.py && uv run ruff check . && uv run pytest"
+  },
+  "frozenPaths": [
+    "achievements/catalog.py",
+    "docs/agent/frozen-decisions.md",
+    "docs/agent/frozen-application-contract.md",
+    "docs/agent/adrs/**"
+  ],
+  "decisionsFile": "docs/agent/frozen-decisions.md",
+  "mirror": {
+    "skillRoots": ["plugins/achievements-blender-codex/skills"],
+    "agentsRoot": ".codex/agents",
+    "hooksJson": ".codex/hooks.json",
+    "claudeDir": ".claude"
+  },
+  "notes": "uv/Python-only repo. verify.fast is the four static verifiers (cheap enough for a pre-commit gate); verify.ship adds uv run pytest. frozenPaths cover the append-only catalog, the frozen contracts, and every ADR - tools/frozen-guard.mjs blocks a commit that stages one, and OWNER_OVERRIDE=1 is a one-shot owner escape hatch that must be recorded in docs/agent/frozen-decisions.md. mirror generates .claude/skills and .claude/agents from the Codex canon via node tools/sync-harness.mjs --write; never edit the mirror by hand. The Blender smoke matrix (5.0.1/5.1.2/5.2.0) is intentionally not in any verify tier - it is a separate deep gate, see AGENTS.md."
+}
